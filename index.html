@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <script>try{ var th = localStorage.getItem('binder-theme'); if(th) document.documentElement.setAttribute('data-theme', th); }catch(e){}</script>
 <title>Study Binder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -365,6 +368,10 @@
   .auto-panel .hint{ font-size:12px; color:var(--ink-soft); }
   .auto-panel .row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
   .auto-panel code{ font-family:'IBM Plex Mono',monospace; font-size:12px; background:var(--paper); padding:1px 5px; border-radius:4px; }
+
+  .update-bar{ position:fixed; left:50%; bottom:18px; transform:translateX(-50%); z-index:50; display:flex; gap:12px; align-items:center;
+    background:var(--ink); color:var(--paper); padding:10px 12px 10px 16px; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.3); font-size:13.5px; }
+  .update-bar .btn-primary{ background:var(--paper); color:var(--ink); }
 
   /* ---- calendar ---- */
   #calOverlay{ padding:0; z-index:30; background:var(--paper); }
@@ -1530,6 +1537,44 @@ document.addEventListener('keydown', (e) => {
   if(e.key === 'ArrowRight') $('calNext').click();
 });
 
+// ---- always run the latest version of the site ----
+// Bump APP_VERSION here AND in version.json every time the site is published.
+const APP_VERSION = '2026-09-28.2';
+function busyForUpdate(){
+  return $('overlay').classList.contains('open') || isListening || isSummarizing || autoWriting;
+}
+function showUpdateBar(v){
+  if($('updateBar')) return;
+  const bar = document.createElement('div');
+  bar.id = 'updateBar';
+  bar.className = 'update-bar';
+  bar.innerHTML = '<span>A new version of Study Binder is ready.</span><button class="btn btn-primary">Refresh now</button>';
+  bar.querySelector('button').addEventListener('click', () => loadVersion(v));
+  document.body.appendChild(bar);
+}
+function loadVersion(v){
+  if(autoTimer) writeAutoBackup();
+  try{ sessionStorage.setItem('binder-reloaded-for', v); }catch(e){}
+  location.replace(location.pathname + '?v=' + encodeURIComponent(v));   // new URL skips the browser's cached copy
+}
+async function checkForUpdate(){
+  if(!/^https?:$/.test(location.protocol)) return;   // opened as a local file: nothing to check
+  if(new URLSearchParams(location.search).has('v')) history.replaceState(null, '', location.pathname);
+  let remote;
+  try{
+    const res = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
+    if(!res.ok) return;
+    remote = String((await res.json()).version || '');
+  }catch(e){ return; }
+  if(!remote || remote === APP_VERSION) return;
+  let tried = null;
+  try{ tried = sessionStorage.getItem('binder-reloaded-for'); }catch(e){}
+  if(tried === remote || busyForUpdate()) showUpdateBar(remote);   // don't loop, and don't interrupt work
+  else loadVersion(remote);
+}
+document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible') checkForUpdate(); });
+setInterval(checkForUpdate, 10 * 60 * 1000);
+
 // ---- dark mode ----
 function isDark(){
   const set = document.documentElement.getAttribute('data-theme');
@@ -2542,6 +2587,7 @@ $('searchInput').addEventListener('input', (e) => {
   loadVoice();
   renderThemeBtn();
   initAutoBackup();
+  checkForUpdate();
   // ask the browser not to clear this site's storage when disk space runs low
   try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}
   if(liveTranscript.trim() || currentSummary) setVoiceStatus('Restored your last recording.');
