@@ -1,0 +1,2348 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>try{ var th = localStorage.getItem('binder-theme'); if(th) document.documentElement.setAttribute('data-theme', th); }catch(e){}</script>
+<title>Study Binder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,500;0,600;0,700;1,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#efead9;
+    --paper-card:#f7f4ea;
+    --paper-edge:#ddd4b8;
+    --ink:#23303b;
+    --ink-soft:#5b6875;
+    --ring:#c9c0a2;
+    --teal:#1f6f63;
+    --mustard:#c98a2b;
+    --brick:#b5533c;
+    --slate:#3b5773;
+    --olive:#6b7a3a;
+    --danger:#a13f3f;
+    --surface:#ffffff;
+    --spine-a:#e3dcc5;
+    --spine-b:#dcd3b6;
+    color-scheme: light;
+  }
+  :root[data-theme="dark"]{
+    --paper:#1b1f24; --paper-card:#242a31; --paper-edge:#3a434d; --ink:#e7e2d4; --ink-soft:#a4aeb9;
+    --ring:#4a525c; --teal:#2b8a7b; --slate:#5d82a8; --olive:#7f8f47; --danger:#d46a6a; --brick:#c0604a;
+    --surface:#2c333b; --spine-a:#20252b; --spine-b:#1a1e23; color-scheme: dark;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#1b1f24; --paper-card:#242a31; --paper-edge:#3a434d; --ink:#e7e2d4; --ink-soft:#a4aeb9;
+      --ring:#4a525c; --teal:#2b8a7b; --slate:#5d82a8; --olive:#7f8f47; --danger:#d46a6a; --brick:#c0604a;
+      --surface:#2c333b; --spine-a:#20252b; --spine-b:#1a1e23; color-scheme: dark;
+    }
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+  }
+  .app{ display:flex; flex-wrap:wrap; min-height:100vh; }
+  .binder-body{ display:flex; flex:1 1 640px; min-width:320px; }
+
+  /* ---- spine + tabs ---- */
+  .spine{
+    width:34px;
+    background:linear-gradient(180deg,var(--spine-a),var(--spine-b));
+    border-right:1px solid var(--paper-edge);
+    display:flex; flex-direction:column; align-items:center;
+    padding-top:28px; gap:22px; flex-shrink:0;
+  }
+  .hole{ width:11px;height:11px;border-radius:50%; background:var(--paper);
+    box-shadow:inset 0 1px 3px rgba(0,0,0,.35); }
+
+  .tabs{ width:160px; flex-shrink:0; padding:22px 0; display:flex; flex-direction:column; gap:10px; }
+  .tab{
+    position:relative; margin-left:-1px;
+    padding:9px 14px 9px 16px;
+    font-family:'IBM Plex Mono',monospace; font-size:12.5px; letter-spacing:.02em;
+    color:#fff; cursor:pointer; border-radius:3px 8px 8px 3px;
+    box-shadow:0 2px 4px rgba(0,0,0,.15);
+    transition:transform .12s ease, box-shadow .12s ease; opacity:.85;
+  }
+  .tab:hover{ transform:translateX(3px); opacity:1;}
+  .tab.active{ transform:translateX(9px); opacity:1; box-shadow:0 3px 8px rgba(0,0,0,.25); }
+  .tab-top{ display:flex; align-items:center; justify-content:space-between; gap:6px; }
+  .tab-count{ font-size:10.5px; opacity:.85; background:rgba(255,255,255,.22); padding:1px 6px; border-radius:8px; }
+  .tab-del{ background:none;border:none;color:rgba(255,255,255,.65); cursor:pointer;font-size:13px;line-height:1;padding:0 2px; display:none; }
+  .tab:hover .tab-del, .tab.active .tab-del{display:inline;}
+  @media (hover:none){ .tab-del{display:inline;} }
+  .tab-name{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+  .tab-del:hover{color:#fff;}
+  .tab-due{ font-size:10px; margin-top:3px; opacity:.9; font-weight:500; }
+  .tab-due.overdue{ color:#3a1414; background:rgba(255,255,255,.55); display:inline-block; padding:1px 6px; border-radius:6px; }
+  .tab-due.soon{ color:#3a2a06; background:rgba(255,255,255,.55); display:inline-block; padding:1px 6px; border-radius:6px; }
+
+  .add-tab-form{ margin:4px 6px 0 6px; }
+  .add-tab-form input{
+    width:100%; font-family:'IBM Plex Mono',monospace; font-size:12px;
+    padding:8px 10px; border:1px dashed var(--ink-soft); border-radius:6px;
+    background:transparent; color:var(--ink); margin-bottom:6px;
+  }
+  .add-tab-btn{
+    margin:4px 6px 0 6px; background:none; border:1px dashed var(--ink-soft); color:var(--ink-soft);
+    font-family:'IBM Plex Mono',monospace; font-size:12px; padding:8px 10px; border-radius:6px;
+    cursor:pointer; text-align:left; width:calc(100% - 12px);
+  }
+  .add-tab-btn:hover{ color:var(--ink); border-color:var(--ink);}
+
+  /* ---- main panel ---- */
+  .main{ flex:1; padding:34px 42px 60px 34px; max-width:920px; }
+  .topbar{ display:flex; align-items:flex-start; justify-content:space-between; gap:20px; margin-bottom:2px; flex-wrap:wrap; }
+  .brand{ font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.14em; color:var(--ink-soft); text-transform:uppercase; margin:0 0 4px 0; }
+  .title-row{ display:flex; align-items:center; gap:10px; }
+  h1{ font-family:'Spectral',serif; font-weight:700; font-size:34px; margin:0; display:flex; align-items:center; gap:10px; }
+  .topic-swatch{ width:14px;height:14px;border-radius:3px;flex-shrink:0; }
+  .icon-btn{ background:none; border:1px solid var(--paper-edge); border-radius:6px; color:var(--ink-soft); cursor:pointer; font-size:13px; padding:5px 8px; font-family:'IBM Plex Mono',monospace;}
+  .icon-btn:hover{ color:var(--ink); border-color:var(--ink-soft); }
+  .topic-meta{ font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--ink-soft); margin-top:6px; }
+  .topic-meta.overdue{ color:var(--danger); }
+  .topic-meta.soon{ color:var(--mustard); }
+
+  .topic-edit-form{
+    margin-top:10px; background:var(--paper-card); border:1px solid var(--paper-edge);
+    border-radius:8px; padding:14px; max-width:340px;
+  }
+  .topic-edit-form label{ display:block; font-family:'IBM Plex Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); margin-bottom:4px; }
+  .topic-edit-form input{ width:100%; font-family:'Inter',sans-serif; font-size:13.5px; padding:7px 9px; border:1px solid var(--paper-edge); border-radius:5px; margin-bottom:10px; background:var(--surface); color:var(--ink); }
+  .topic-edit-actions{ display:flex; justify-content:flex-end; gap:8px; }
+
+  .search-wrap{ margin:22px 0 6px 0; position:relative; }
+  .search-wrap input{
+    width:100%; font-family:'IBM Plex Mono',monospace; font-size:13px;
+    padding:12px 16px 12px 38px; border:1px solid var(--paper-edge); border-radius:8px;
+    background:var(--paper-card); color:var(--ink);
+  }
+  .search-wrap input:focus{ outline:2px solid var(--slate); outline-offset:1px;}
+  .search-wrap::before{ content:"⌕"; position:absolute; left:13px;top:50%;transform:translateY(-50%); font-size:16px;color:var(--ink-soft); }
+
+  .search-scope{ display:flex; gap:8px; margin:10px 0 0 0; }
+  .scope-btn{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; padding:5px 11px; border-radius:12px;
+    border:1px solid var(--paper-edge); background:transparent; color:var(--ink-soft); cursor:pointer;
+  }
+  .scope-btn.active{ background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  .scope-btn:hover:not(.active){ border-color:var(--ink-soft); color:var(--ink); }
+
+  .new-note-btn{
+    font-family:'IBM Plex Mono',monospace; font-size:12.5px; padding:10px 16px; border:none;
+    border-radius:6px; background:var(--ink); color:var(--paper); cursor:pointer; flex-shrink:0;
+  }
+  .new-note-btn:hover{ filter:brightness(1.15); }
+
+  .cards{ margin-top:22px; display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:16px; }
+  .card{
+    background:var(--paper-card); border:1px solid var(--paper-edge); border-top:4px solid var(--teal);
+    border-radius:4px 4px 8px 8px; padding:16px 16px 14px 16px; cursor:pointer;
+    box-shadow:0 1px 2px rgba(0,0,0,.05); transition:box-shadow .12s ease, transform .12s ease;
+    display:flex; flex-direction:column; min-height:130px;
+  }
+  .card:hover{ box-shadow:0 4px 12px rgba(0,0,0,.1); transform:translateY(-1px);}
+  .card h3{ font-family:'Spectral',serif; font-size:17px; margin:0 0 8px 0; font-weight:600; }
+  .card p{ font-size:12.5px; color:var(--ink-soft); line-height:1.55; margin:0; flex:1; overflow:hidden;
+    display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; }
+  .card mark{ background:#f0d27a; color:#23303b; border-radius:2px; padding:0 1px; }
+  .card .meta{ font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--ink-soft); margin-top:10px; opacity:.75; display:flex; align-items:center; gap:8px; }
+  .card .search-topic-label{
+    font-family:'IBM Plex Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:.06em;
+    margin-bottom:8px; color:#fff; display:inline-block; padding:2px 7px; border-radius:8px; width:fit-content;
+  }
+  .clip{ opacity:.8; }
+
+  .empty{ margin-top:60px; text-align:center; color:var(--ink-soft); }
+  .empty h2{ font-family:'Spectral',serif; font-size:22px; color:var(--ink); margin-bottom:6px; }
+  .empty p{ font-size:13.5px; }
+
+  /* ---- modal editor ---- */
+  .overlay{ position:fixed; inset:0; background:rgba(20,24,28,.45); display:none;
+    align-items:flex-start; justify-content:center; padding:50px 20px; z-index:10; overflow-y:auto; }
+  .overlay.open{ display:flex; }
+  .editor{ background:var(--paper-card); width:100%; max-width:560px; border-radius:8px; padding:26px 26px 20px 26px; box-shadow:0 20px 50px rgba(0,0,0,.35); margin-bottom:40px; }
+  /* the note editor fills the whole screen */
+  #overlay{ padding:0; z-index:30; background:var(--paper-card); }
+  #overlay .editor{ max-width:none; min-height:100vh; border-radius:0; padding:0; margin:0; box-shadow:none; }
+  .editor-bar{ position:sticky; top:0; z-index:2; display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:10px 24px; background:var(--paper-card); border-bottom:1px solid var(--paper-edge); }
+  .editor-bar-hint{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft); flex:1; text-align:center; }
+  .editor-inner{ max-width:1100px; margin:0 auto; padding:22px 28px 60px 28px; }
+  #overlay .editor input#editTitle{ font-size:26px; padding:6px 2px 10px 2px; }
+  #overlay .editor textarea{ min-height:calc(100vh - 210px); font-size:16px; line-height:1.7; padding:16px 18px; }
+  #overlay .md-preview{ min-height:calc(100vh - 210px); font-size:16px; line-height:1.7; padding:16px 18px; }
+  .editor-extras{ margin-top:28px; padding-top:18px; border-top:2px solid var(--paper-edge); }
+  .extras-title{ font-family:'Spectral',serif; font-size:18px; margin:0 0 14px 0; font-weight:600; }
+  .editor-voice-controls{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .editor-voice-controls .voice-status{ margin-top:0; }
+  .editor-voice-live{ font-size:12.5px; color:var(--ink-soft); margin-top:6px; white-space:pre-wrap; max-height:90px; overflow-y:auto; }
+  body.editor-open{ overflow:hidden; }
+  @media (max-width:640px){
+    .editor-bar{ padding:8px 12px; flex-wrap:wrap; }
+    .editor-bar-hint{ display:none; }
+    .editor-inner{ padding:16px 14px 50px 14px; }
+  }
+  .editor-row{ margin-bottom:16px; }
+  .editor label{ display:block; font-family:'IBM Plex Mono',monospace; font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-soft); margin-bottom:6px; }
+  .editor input[type=text]{
+    width:100%; font-family:'Spectral',serif; font-size:19px; font-weight:600; border:none;
+    border-bottom:1px solid var(--paper-edge); padding:4px 2px 8px 2px; background:transparent; color:var(--ink);
+  }
+  .editor input[type=text]:focus{ outline:none; border-bottom-color:var(--ink);}
+  .editor textarea{
+    width:100%; min-height:200px; font-family:'Inter',sans-serif; font-size:14px; line-height:1.6;
+    border:1px solid var(--paper-edge); border-radius:6px; padding:12px; resize:vertical; color:var(--ink); background:var(--surface);
+  }
+  .editor textarea:focus{ outline:2px solid var(--slate); outline-offset:1px;}
+
+  .attach-list{ display:flex; flex-direction:column; gap:8px; margin-bottom:10px; }
+  .attach-item{ display:flex; align-items:center; gap:10px; background:var(--surface); border:1px solid var(--paper-edge); border-radius:6px; padding:7px 9px; }
+  .attach-item img{ width:34px; height:34px; object-fit:cover; border-radius:4px; flex-shrink:0; }
+  .attach-item .attach-icon{ width:34px;height:34px;border-radius:4px;background:var(--paper);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0; }
+  .attach-item a{ font-size:12.5px; color:var(--slate); text-decoration:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+  .attach-item a:hover{ text-decoration:underline; }
+  .attach-remove{ background:none; border:none; color:var(--ink-soft); cursor:pointer; font-size:14px; flex-shrink:0; }
+  .attach-remove:hover{ color:var(--danger); }
+  .attach-add{ display:flex; gap:8px; }
+  .attach-add input{ font-family:'Inter',sans-serif; font-size:12.5px; padding:7px 9px; border:1px solid var(--paper-edge); border-radius:5px; background:var(--surface); color:var(--ink); }
+  .attach-add input[name=url]{ flex:2; }
+  .attach-add input[name=label]{ flex:1; }
+  .attach-add button{ font-family:'IBM Plex Mono',monospace; font-size:12px; padding:7px 12px; border:none; border-radius:5px; background:var(--slate); color:#fff; cursor:pointer; }
+  .attach-add button:hover{ filter:brightness(1.15); }
+
+  /* ---- right sidebar: voice notes ---- */
+  .right-sidebar{
+    flex:0 0 380px; background:var(--paper-card); border-left:1px solid var(--paper-edge);
+    padding:26px 22px 40px 22px; position:sticky; top:0; align-self:flex-start; height:100vh;
+    overflow-y:auto; z-index:15;
+  }
+  .sidebar-title{ font-family:'Spectral',serif; font-weight:700; font-size:19px; margin:0 0 4px 0; }
+  .sidebar-sub{ font-family:'Inter',sans-serif; font-size:12px; color:var(--ink-soft); margin:0 0 18px 0; line-height:1.5; }
+
+  .voice-panel{ background:var(--surface); border:1px solid var(--paper-edge); border-radius:8px; padding:12px 14px; }
+  .voice-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .mic-btn{
+    font-family:'IBM Plex Mono',monospace; font-size:12.5px; padding:8px 14px; border-radius:6px;
+    border:none; background:var(--brick); color:#fff; cursor:pointer; display:flex; align-items:center; gap:7px;
+    width:100%; justify-content:center;
+  }
+  .mic-btn:hover{ filter:brightness(1.15); }
+  .mic-btn.listening{ background:var(--danger); }
+  .mic-btn.listening .dot{ animation:pulse 1s infinite; }
+  .dot{ width:8px;height:8px;border-radius:50%; background:#fff; display:inline-block; }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:.25;} }
+  .voice-status{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft); margin-top:8px; min-height:14px; }
+
+  .voice-columns{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:14px; }
+  .voice-col-label{ font-family:'IBM Plex Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); margin-bottom:6px; }
+  .transcript-box{
+    font-size:12.5px; color:var(--ink); background:var(--paper);
+    border-radius:6px; padding:9px 10px; min-height:160px; max-height:280px; overflow-y:auto; line-height:1.5; white-space:pre-wrap;
+  }
+  .transcript-box.empty-hint{ color:var(--ink-soft); font-style:italic; }
+
+  .summary-options{ display:flex; gap:6px; margin-top:14px; }
+  .summary-btn{
+    flex:1; font-family:'IBM Plex Mono',monospace; font-size:10.5px; padding:8px 4px; border-radius:6px;
+    border:1px solid var(--paper-edge); background:var(--surface); color:var(--ink); cursor:pointer; text-align:center;
+  }
+  .summary-btn:hover:not(:disabled){ border-color:var(--slate); color:var(--slate); }
+  .summary-btn.active{ background:var(--slate); color:#fff; border-color:var(--slate); }
+  .summary-btn:disabled{ opacity:.45; cursor:not-allowed; }
+
+  .sidebar-actions{ display:flex; gap:8px; margin-top:16px; }
+  .sidebar-actions .btn{ flex:1; text-align:center; }
+  .sidebar-actions .btn:disabled{ opacity:.45; cursor:not-allowed; }
+
+  /* ---- related reading ---- */
+  .related-host{ margin:18px 0 0 0; }
+  .related-panel{ background:var(--paper-card); border:1px solid var(--paper-edge); border-radius:8px; padding:16px 18px; }
+  .related-panel-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
+  .related-panel-head h3{ font-family:'Spectral',serif; font-size:16px; margin:0; font-weight:600; }
+  .related-close{ background:none; border:none; color:var(--ink-soft); cursor:pointer; font-size:14px; }
+  .related-close:hover{ color:var(--ink); }
+  .related-loading{ font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink-soft); }
+  .related-list{ display:flex; flex-direction:column; gap:11px; }
+  .related-item{ display:flex; flex-direction:column; gap:3px; }
+  .related-item a{ font-size:13.5px; color:var(--slate); text-decoration:none; font-weight:600; }
+  .related-item a:hover{ text-decoration:underline; }
+  .related-item .related-desc{ font-size:12px; color:var(--ink-soft); }
+  .stance-pill{
+    font-family:'IBM Plex Mono',monospace; font-size:9.5px; text-transform:uppercase; letter-spacing:.05em;
+    padding:1px 7px; border-radius:8px; color:#fff; width:fit-content;
+  }
+  .stance-supports{ background:var(--teal); }
+  .stance-challenges{ background:var(--brick); }
+  .stance-background{ background:var(--slate); }
+
+
+  .related-inline{ margin-top:16px; padding-top:14px; border-top:1px solid var(--paper-edge); }
+  .related-inline h4{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); margin:0 0 8px 0; }
+  .related-btn-row{ margin-top:8px; }
+
+  /* ---- backup / restore ---- */
+  .backup-row{ display:flex; gap:8px; margin-top:8px; }
+  .backup-row button{
+    font-family:'IBM Plex Mono',monospace; font-size:10.5px; padding:5px 10px; border-radius:6px;
+    border:1px solid var(--paper-edge); background:transparent; color:var(--ink-soft); cursor:pointer;
+  }
+  .backup-row button:hover{ color:var(--ink); border-color:var(--ink-soft); }
+
+  /* ---- flashcards ---- */
+  .flash-modal{ background:var(--paper-card); width:100%; max-width:480px; border-radius:10px; padding:24px; box-shadow:0 20px 50px rgba(0,0,0,.35); margin-bottom:40px; }
+  .flash-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; gap:10px; }
+  .flash-head h3{ font-family:'Spectral',serif; font-size:18px; margin:0; font-weight:600; }
+  .flash-progress{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft); margin-bottom:14px; }
+  .flash-card{
+    background:var(--surface); border:1px solid var(--paper-edge); border-radius:10px; min-height:200px;
+    display:flex; align-items:center; justify-content:center; text-align:center; padding:26px; cursor:pointer;
+  }
+  .flash-card-inner{ font-family:'Spectral',serif; font-size:18px; line-height:1.55; }
+  .flash-label{ display:block; font-family:'IBM Plex Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-soft); margin-bottom:10px; }
+  .flash-hint{ text-align:center; font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--ink-soft); margin-top:8px; }
+  .flash-controls{ display:flex; gap:8px; margin-top:16px; }
+  .flash-controls .btn{ flex:1; text-align:center; }
+  .flash-footer{ margin-top:10px; text-align:center; }
+  .flash-empty{ font-family:'IBM Plex Mono',monospace; font-size:12.5px; color:var(--ink-soft); text-align:center; padding:34px 10px; }
+
+  .flash-grade{ display:flex; gap:8px; margin-top:12px; }
+  .flash-grade .btn{ flex:1; text-align:center; color:#fff; }
+  .grade-miss{ background:var(--brick); }
+  .grade-miss:hover{ filter:brightness(1.15); }
+  .grade-got{ background:var(--teal); }
+  .grade-got:hover{ filter:brightness(1.15); }
+  .flash-record{ display:block; font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--ink-soft); margin-top:12px; }
+  .flash-summary{ text-align:center; }
+  .flash-summary h4{ font-family:'Spectral',serif; font-size:20px; margin:0 0 6px 0; }
+  .flash-summary p{ font-family:'Inter',sans-serif; font-size:13px; color:var(--ink-soft); margin:0 0 14px 0; }
+  .flash-summary .btn{ margin:3px; }
+
+  /* ---- note formatting ---- */
+  .md-toolbar{ display:flex; gap:4px; flex-wrap:wrap; margin-bottom:6px; align-items:center; }
+  .md-btn{ font-family:'IBM Plex Mono',monospace; font-size:12px; min-width:30px; padding:4px 8px; border:1px solid var(--paper-edge); border-radius:5px; background:var(--surface); color:var(--ink); cursor:pointer; }
+  .md-btn:hover{ border-color:var(--ink-soft); }
+  .md-btn.active{ background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  .md-spacer{ flex:1; }
+  .md-preview{ min-height:200px; background:var(--surface); border:1px solid var(--paper-edge); border-radius:6px; padding:12px 14px; font-size:14px; line-height:1.6; overflow-wrap:anywhere; }
+  .md h1,.md h2,.md h3{ font-family:'Spectral',serif; margin:.7em 0 .3em 0; line-height:1.25; }
+  .md h1{ font-size:21px; } .md h2{ font-size:18px; } .md h3{ font-size:16px; }
+  .md p{ margin:0 0 .7em 0; }
+  .md ul,.md ol{ margin:0 0 .7em 0; padding-left:22px; }
+  .md code{ font-family:'IBM Plex Mono',monospace; font-size:.9em; background:var(--paper); padding:1px 4px; border-radius:3px; }
+  .md a{ color:var(--slate); }
+  .md > :first-child{ margin-top:0; }
+
+  /* ---- topic colours + drag ---- */
+  .swatches{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
+  .swatch{ width:24px; height:24px; border-radius:5px; border:2px solid transparent; cursor:pointer; padding:0; }
+  .swatch.selected{ border-color:var(--ink); box-shadow:0 0 0 2px var(--paper-card) inset; }
+  .order-row{ display:flex; gap:6px; margin-bottom:10px; }
+  .tab.dragging{ opacity:.4; }
+  .tab.drop-before{ box-shadow:0 -3px 0 var(--ink); }
+  .tab.drop-after{ box-shadow:0 3px 0 var(--ink); }
+
+  /* ---- safety banner ---- */
+  .safety-banner{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:10px 0 4px 0; padding:11px 14px; border-radius:8px;
+    border:1px solid var(--paper-edge); background:var(--paper-card); font-size:13px; line-height:1.45; }
+  .safety-banner.warn{ border-color:var(--mustard); }
+  .safety-banner.danger{ border-color:var(--danger); border-width:2px; }
+  .safety-banner .msg{ flex:1 1 260px; }
+  .safety-banner strong{ font-weight:600; }
+  .safety-banner .btn{ padding:7px 12px; font-size:12px; }
+
+  /* ---- auto-backup ---- */
+  .backup-row button.auto-on{ color:var(--teal); border-color:var(--teal); }
+  .backup-row button.auto-warn{ color:var(--danger); border-color:var(--danger); }
+  .auto-panel{ margin-top:10px; background:var(--paper-card); border:1px solid var(--paper-edge); border-radius:8px; padding:14px 16px; max-width:560px; font-size:13px; line-height:1.55; }
+  .auto-panel h3{ font-family:'Spectral',serif; font-size:16px; margin:0 0 6px 0; font-weight:600; }
+  .auto-panel p{ margin:0 0 10px 0; }
+  .auto-panel .hint{ font-size:12px; color:var(--ink-soft); }
+  .auto-panel .row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .auto-panel code{ font-family:'IBM Plex Mono',monospace; font-size:12px; background:var(--paper); padding:1px 5px; border-radius:4px; }
+
+  /* ---- deadlines ---- */
+  .deadlines-panel{ margin-top:10px; background:var(--paper-card); border:1px solid var(--paper-edge); border-radius:8px; padding:14px 16px; max-width:560px; }
+  .deadlines-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  .deadlines-head h3{ font-family:'Spectral',serif; font-size:16px; margin:0; font-weight:600; }
+  .deadline-row{ display:flex; align-items:center; gap:10px; padding:8px 6px; border-radius:6px; cursor:pointer; }
+  .deadline-row:hover{ background:var(--paper); }
+  .deadline-row + .deadline-row{ border-top:1px solid var(--paper-edge); }
+  .deadline-name{ flex:1; font-weight:500; font-size:13.5px; }
+  .deadline-date{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft); }
+  .deadline-left{ font-family:'IBM Plex Mono',monospace; font-size:11px; padding:2px 8px; border-radius:8px; background:var(--paper); min-width:92px; text-align:center; }
+  .deadline-left.overdue{ background:var(--danger); color:#fff; }
+  .deadline-left.soon{ background:var(--mustard); color:#fff; }
+  .deadlines-empty{ font-size:12.5px; color:var(--ink-soft); }
+
+  /* ---- print ---- */
+  #printArea{ display:none; }
+  @media print{
+    body *{ visibility:hidden; }
+    #printArea, #printArea *{ visibility:visible; }
+    #printArea{ display:block !important; position:absolute; left:0; top:0; width:100%; padding:20px; }
+    .print-note{ margin-bottom:22px; page-break-inside:avoid; }
+    .print-note h2{ font-family:'Spectral',serif; font-size:16px; margin:0 0 6px 0; }
+    .print-content{ font-family:'Inter',sans-serif; font-size:12px; line-height:1.6; margin:0 0 8px 0; }
+    .print-attachments{ font-family:'Inter',sans-serif; font-size:11px; color:#444; }
+  }
+
+  .editor-actions{ display:flex; justify-content:space-between; align-items:center; margin-top:16px; }
+  .btn{ font-family:'IBM Plex Mono',monospace; font-size:12.5px; padding:9px 15px; border-radius:6px; border:none; cursor:pointer; }
+  .btn-primary{ background:var(--ink); color:var(--paper); }
+  .btn-primary:hover{ filter:brightness(1.15); }
+  .btn-ghost{ background:none; color:var(--ink-soft); }
+  .btn-ghost:hover{ color:var(--ink); }
+  .btn-danger{ background:none; color:var(--danger); }
+  .btn-danger:hover{ text-decoration:underline; }
+
+  .status{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--ink-soft); position:fixed; bottom:14px; right:18px; }
+
+  @media (max-width:640px){
+    .tabs{ width:120px; }
+    .main{ padding:24px 18px 60px 18px; }
+    h1{ font-size:26px; }
+  }
+  @media (max-width:1000px){
+    .right-sidebar{ flex:1 1 100%; height:auto; position:static; border-left:none; border-top:1px solid var(--paper-edge); z-index:auto; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="binder-body">
+    <div class="spine" id="spine"></div>
+    <div class="tabs" id="tabs"></div>
+
+    <div class="main">
+      <p class="brand">Study Binder</p>
+      <div class="backup-row">
+        <button id="backupBtn">⬇ Backup</button>
+        <button id="restoreBtn">⬆ Restore</button>
+        <button id="apiKeyBtn">🔑 Google API key</button>
+        <button id="autoBackupBtn">💾 Auto-backup: off</button>
+        <button id="deadlinesBtn">📅 Deadlines</button>
+        <button id="themeBtn">🌙 Dark mode</button>
+        <input type="file" id="restoreInput" accept="application/json" style="display:none;">
+      </div>
+      <div id="apiKeyPanel"></div>
+      <div id="autoBackupPanel"></div>
+      <div id="deadlinesHost"></div>
+      <div id="safetyBanner"></div>
+      <div class="topbar">
+        <div>
+          <div class="title-row">
+            <h1 id="topicTitle"></h1>
+            <button class="icon-btn" id="editTopicBtn" title="Edit topic">✎</button>
+            <button class="icon-btn" id="flashcardsBtn" title="Flashcards">🗂</button>
+            <button class="icon-btn" id="printBtn" title="Print / Save as PDF">🖨</button>
+          </div>
+          <div class="topic-meta" id="topicMeta"></div>
+          <div id="topicEditForm"></div>
+        </div>
+        <button class="new-note-btn" id="newNoteBtn">+ New note</button>
+      </div>
+
+      <div class="related-host" id="relatedHost"></div>
+
+      <div class="search-wrap">
+        <input type="text" id="searchInput" placeholder="Search for a word or topic to find where it's noted…" lang="en-GB">
+      </div>
+      <div class="search-scope" id="searchScope"></div>
+
+      <div class="cards" id="cards"></div>
+      <div class="empty" id="emptyState" style="display:none;">
+        <h2>Nothing here yet</h2>
+        <p>Add your first note with the button above.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="right-sidebar" id="rightSidebar">
+    <p class="sidebar-title">🎙 Voice notes</p>
+    <p class="sidebar-sub">Record a lecture or reading. It transcribes live here, then you can turn it into a summary and drop it into whichever note you're editing.</p>
+
+    <div class="voice-panel">
+      <div class="voice-row">
+        <button class="mic-btn" id="micBtn"><span class="dot"></span><span id="micBtnText">🎙 Start listening</span></button>
+      </div>
+      <div class="voice-status" id="voiceStatus"></div>
+      <div class="voice-status" id="insertHint"></div>
+    </div>
+
+    <div class="summary-options">
+      <button class="summary-btn" id="quickSummaryBtn" disabled>Quick brief</button>
+      <button class="summary-btn" id="normalSummaryBtn" disabled>Normal</button>
+      <button class="summary-btn" id="detailedSummaryBtn" disabled>Detailed</button>
+    </div>
+
+    <div class="voice-columns">
+      <div class="voice-col">
+        <div class="voice-col-label">Transcript</div>
+        <div class="transcript-box empty-hint" id="voiceLive">Nothing recorded yet — press start and begin speaking.</div>
+      </div>
+      <div class="voice-col">
+        <div class="voice-col-label">Summary</div>
+        <div class="transcript-box empty-hint" id="summaryResult">Choose a length above once you've stopped recording.</div>
+      </div>
+    </div>
+
+    <div class="sidebar-actions">
+      <button class="btn btn-ghost" id="clearVoiceBtn" disabled>Clear</button>
+      <button class="btn btn-primary" id="insertVoiceBtn" disabled>Insert into note</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="editor">
+    <div class="editor-bar">
+      <button class="btn btn-danger" id="deleteNoteBtn">Delete note</button>
+      <span class="editor-bar-hint">Saves automatically · Esc to close</span>
+      <div>
+        <button class="btn btn-ghost" id="cancelEditBtn">Close</button>
+        <button class="btn btn-primary" id="saveNoteBtn">Save &amp; close</button>
+      </div>
+    </div>
+    <div class="editor-inner">
+      <div class="editor-row">
+        <input type="text" id="editTitle" placeholder="Note title" lang="en-GB" spellcheck="true">
+      </div>
+      <div class="editor-row">
+        <div class="md-toolbar">
+          <button class="md-btn" data-md="bold" title="Bold"><b>B</b></button>
+          <button class="md-btn" data-md="italic" title="Italic"><i>I</i></button>
+          <button class="md-btn" data-md="h2" title="Heading">H</button>
+          <button class="md-btn" data-md="ul" title="Bullet list">• List</button>
+          <button class="md-btn" data-md="ol" title="Numbered list">1. List</button>
+          <span class="md-spacer"></span>
+          <button class="md-btn" id="mdPreviewBtn" title="See the formatted note">Preview</button>
+        </div>
+        <textarea id="editContent" lang="en-GB" spellcheck="true" placeholder="Write your notes… Use **bold**, *italic*, ## headings and - bullets"></textarea>
+        <div class="md-preview md" id="mdPreview" style="display:none;"></div>
+      </div>
+
+      <div class="editor-extras">
+        <h4 class="extras-title">References and extras</h4>
+        <div class="editor-row">
+          <label>Attachments (image or file links)</label>
+          <div class="attach-list" id="attachList"></div>
+          <div class="attach-add">
+            <input type="text" name="url" id="attachUrl" placeholder="https://…">
+            <input type="text" name="label" id="attachLabel" placeholder="Label (optional)">
+            <button id="attachAddBtn">Add</button>
+          </div>
+        </div>
+        <div class="editor-row editor-voice-row" id="editorVoiceRow">
+          <label>Voice notes</label>
+          <div class="editor-voice-controls">
+            <button class="btn btn-ghost" id="editorMicBtn">🎙 Start listening</button>
+            <button class="btn btn-ghost" id="editorInsertVoiceBtn" disabled>Insert voice notes</button>
+            <span class="voice-status" id="editorVoiceStatus"></span>
+          </div>
+          <div class="editor-voice-live" id="editorVoiceLive"></div>
+        </div>
+        <div id="relatedInline"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="flashOverlay">
+  <div class="flash-modal">
+    <div class="flash-head">
+      <h3 id="flashTopicTitle">Flashcards</h3>
+      <button class="icon-btn" id="flashCloseBtn" title="Close">✕</button>
+    </div>
+    <div class="flash-progress" id="flashProgress"></div>
+    <div class="flash-card" id="flashCard"><div class="flash-card-inner" id="flashCardInner"></div></div>
+    <div class="flash-hint" id="flashHint">Click the card to flip it, then mark how you did</div>
+    <div class="flash-grade" id="flashGrade" style="display:none;">
+      <button class="btn grade-miss" id="flashMissBtn">✗ Missed it</button>
+      <button class="btn grade-got" id="flashGotBtn">✓ Got it</button>
+    </div>
+    <div class="flash-controls">
+      <button class="btn btn-ghost" id="flashPrevBtn">← Prev</button>
+      <button class="btn btn-ghost" id="flashShuffleBtn">🔀 Shuffle</button>
+      <button class="btn btn-ghost" id="flashNextBtn">Next →</button>
+    </div>
+    <div class="flash-footer">
+      <button class="btn btn-ghost" id="flashMissedOnlyBtn">Study missed only</button>
+      <button class="btn btn-ghost" id="flashRegenBtn">Regenerate from notes</button>
+    </div>
+  </div>
+</div>
+
+<div id="printArea"></div>
+
+<div class="status" id="status"></div>
+
+<script>
+const COLORS = ['#1f6f63','#c98a2b','#b5533c','#3b5773','#6b7a3a'];
+const PALETTE = COLORS.concat(['#7a4b8c','#2f7fa8','#a8325e','#4f5b66','#8c6d3f','#3d8c5a','#c2603a']);
+function nextFreeColor(){
+  const used = data.topics.map(t => t.color);
+  return PALETTE.find(c => !used.includes(c)) || PALETTE[data.topics.length % PALETTE.length];
+}
+const STORE_KEY = 'binder-data';
+const IMG_RE = /\.(png|jpe?g|gif|webp|svg)(\?.*)?$/i;
+
+let data = { topics: [], notes: [] };
+let activeTopicId = null;
+let editingNoteId = null;
+let searchQuery = '';
+let searchScope = 'topic'; // 'topic' | 'all'
+let pendingAttachments = [];
+
+const $ = (id) => document.getElementById(id);
+function uid(){ return Math.random().toString(36).slice(2,10); }
+
+function setStatus(text){
+  const el = $('status');
+  el.textContent = text;
+  if(text){ setTimeout(()=>{ if(el.textContent===text) el.textContent=''; }, 1500); }
+}
+
+// ---- safe storage helpers ----
+const BACKUP_KEY = 'binder-last-backup';
+const CHANGED_KEY = 'binder-last-change';
+const SNOOZE_KEY = 'binder-backup-snooze';
+const CORRUPT_KEY = 'binder-data-damaged-copy';
+const STORAGE_SOFT_LIMIT = 4000000; // characters; browsers allow roughly 5 million
+const BACKUP_EVERY_DAYS = 7;
+function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+function lsSet(k, v){ try{ localStorage.setItem(k, String(v)); return true; }catch(e){ return false; } }
+
+let saveFailed = false;
+let savesPaused = false;      // true while a damaged saved binder has not been rescued yet
+let damagedRaw = null;        // text of a saved binder that could not be read
+let appError = null;
+let storageUsed = 0;
+let externalChange = false;
+let freshStart = false;         // true when this browser had no saved binder
+let freshDismissed = false;
+
+// Checks and cleans a binder (from storage or a backup file) so bad data can't break the app.
+function sanitizeBinder(obj){
+  if(!obj || typeof obj !== 'object' || !Array.isArray(obj.topics) || !Array.isArray(obj.notes)) throw new Error('bad format');
+  const str = (v, max) => (typeof v === 'string' ? v : (v == null ? '' : String(v))).slice(0, max || 200000);
+  const seen = new Set();
+  const topics = [];
+  obj.topics.forEach(t => {
+    if(!t || typeof t !== 'object') return;
+    let id = str(t.id, 40) || uid();
+    while(seen.has(id)) id = uid();
+    seen.add(id);
+    topics.push({
+      id,
+      name: str(t.name, 60).trim() || 'Untitled',
+      color: /^#[0-9a-f]{6}$/i.test(t.color) ? t.color : PALETTE[topics.length % PALETTE.length],
+      dueDate: /^\d{4}-\d{2}-\d{2}$/.test(t.dueDate) ? t.dueDate : null,
+      flashcards: (Array.isArray(t.flashcards) ? t.flashcards : []).filter(c => c && typeof c === 'object').map(c => {
+        const card = { q: str(c.q, 2000), a: str(c.a, 4000) };
+        if(c.stats && typeof c.stats === 'object'){
+          card.stats = { right: Math.max(0, parseInt(c.stats.right) || 0), wrong: Math.max(0, parseInt(c.stats.wrong) || 0) };
+          if(c.stats.last === 'got' || c.stats.last === 'missed') card.stats.last = c.stats.last;
+        }
+        return card;
+      })
+    });
+  });
+  let recoveredId = null;
+  const noteIds = new Set();
+  const notes = [];
+  obj.notes.forEach(n => {
+    if(!n || typeof n !== 'object') return;
+    let topicId = str(n.topicId, 40);
+    if(!seen.has(topicId)){
+      // keep notes whose topic is missing rather than silently dropping them
+      if(!recoveredId){ recoveredId = uid(); seen.add(recoveredId); topics.push({ id: recoveredId, name: 'Recovered notes', color: '#4f5b66', dueDate: null, flashcards: [] }); }
+      topicId = recoveredId;
+    }
+    let id = str(n.id, 40) || uid();
+    while(noteIds.has(id)) id = uid();
+    noteIds.add(id);
+    notes.push({
+      id, topicId,
+      title: str(n.title, 300),
+      content: str(n.content),
+      updatedAt: Number.isFinite(n.updatedAt) ? n.updatedAt : Date.now(),
+      ...(Number.isFinite(n.createdAt) ? { createdAt: n.createdAt } : {}),
+      attachments: (Array.isArray(n.attachments) ? n.attachments : [])
+        .filter(a => a && typeof a === 'object' && isSafeUrl(a.url))
+        .map(a => ({ id: str(a.id, 40) || uid(), url: str(a.url, 2000), label: str(a.label, 200) })),
+      relatedReading: (Array.isArray(n.relatedReading) ? n.relatedReading : [])
+        .filter(r => r && typeof r === 'object')
+        .map(r => ({ label: str(r.label, 200), query: str(r.query, 300), stance: str(r.stance, 20), note: str(r.note, 500) }))
+    });
+  });
+  return { topics, notes };
+}
+
+function isSafeUrl(u){ return typeof u === 'string' && /^https?:\/\//i.test(u.trim()); }
+
+function starterBinder(){
+  const t1 = { id: uid(), name: 'Getting started', color: COLORS[0], dueDate: null, flashcards: [] };
+  return { topics: [t1], notes: [{
+    id: uid(), topicId: t1.id, title: 'How this binder works',
+    content: 'Each coloured tab is a topic. Click the pencil next to a topic\'s name to rename it, pick a colour or set a due date. Add attachments (image or file links) from inside a note. Use search to find a word anywhere — toggle between searching just this topic or everything. The Voice notes panel on the right can record and transcribe, then summarise it at your chosen depth. Try the flashcards (🗂) and print (🖨) buttons up top, and back up your binder any time from the top left.',
+    updatedAt: Date.now(), attachments: [], relatedReading: []
+  }]};
+}
+
+function readStoredBinder(){
+  const raw = lsGet(STORE_KEY);
+  if(!raw) return null;
+  return sanitizeBinder(JSON.parse(raw));
+}
+
+async function loadData(){
+  let raw = null;
+  try{
+    raw = lsGet(STORE_KEY);
+    if(raw){ data = sanitizeBinder(JSON.parse(raw)); storageUsed = raw.length; }
+  }catch(e){
+    // The saved binder is damaged. Never overwrite it silently: keep a copy and offer a download.
+    damagedRaw = raw;
+    if(!lsSet(CORRUPT_KEY, raw)) savesPaused = true;
+    data = { topics: [], notes: [] };
+  }
+  if(!damagedRaw){ const kept = lsGet(CORRUPT_KEY); if(kept) damagedRaw = kept; }
+  if(!data.topics || data.topics.length === 0){
+    const hadNotes = data.notes && data.notes.length;
+    if(!hadNotes){ data = starterBinder(); freshStart = !damagedRaw; }
+  }
+  if(!activeTopicId && data.topics.length){ activeTopicId = data.topics[0].id; }
+}
+
+async function saveData(){
+  if(savesPaused){
+    renderSafetyBanner();
+    setStatus('⚠ Not saved — rescue the damaged copy first (see the red box)');
+    return false;
+  }
+  try{
+    const json = JSON.stringify(data);
+    localStorage.setItem(STORE_KEY, json);
+    storageUsed = json.length;
+    lsSet(CHANGED_KEY, Date.now());
+    saveFailed = false;
+    if(typeof scheduleAutoBackup === 'function') scheduleAutoBackup();
+    setStatus('Saved');
+    renderSafetyBanner();
+    return true;
+  }catch(e){
+    saveFailed = true;
+    renderSafetyBanner();
+    setStatus('⚠ Save failed — storage may be full or blocked');
+    return false;
+  }
+}
+
+function downloadJson(obj, name){
+  const blob = new Blob([typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function stamp(){ return new Date().toISOString().slice(0,16).replace('T','_').replace(':','-'); }
+
+function backupNow(){
+  downloadJson(data, `study-binder-backup-${stamp()}.json`);
+  lsSet(BACKUP_KEY, Date.now());
+  renderSafetyBanner();
+  setStatus('Backup downloaded');
+}
+
+function daysSince(ts){ return Math.floor((Date.now() - ts) / 86400000); }
+
+function renderSafetyBanner(){
+  const host = $('safetyBanner');
+  if(!host) return;
+  let cls = '', msg = '', actions = '';
+  const hasOwnContent = data.notes.some(n => n.title !== 'How this binder works');
+  const lastBackup = parseInt(lsGet(BACKUP_KEY)) || 0;
+  const lastChange = parseInt(lsGet(CHANGED_KEY)) || 0;
+  const snoozeUntil = parseInt(lsGet(SNOOZE_KEY)) || 0;
+
+  if(damagedRaw && savesPaused){
+    cls = 'danger';
+    msg = '<strong>Your saved binder couldn\'t be read.</strong> Nothing has been deleted. Download the damaged copy so it can be repaired; saving is paused until you do.';
+    actions = '<button class="btn btn-primary" data-act="damaged">Download damaged copy</button>';
+  } else if(saveFailed){
+    cls = 'danger';
+    msg = '<strong>Your last change could not be saved.</strong> The browser\'s storage is full or blocked. Download a backup now so nothing is lost, then remove large notes you no longer need.';
+    actions = '<button class="btn btn-primary" data-act="backup">Back up now</button>';
+  } else if(appError){
+    cls = 'warn';
+    msg = `<strong>Something went wrong:</strong> ${escapeHtml(appError)}. Your notes are still saved. If the page acts strangely, back up and then reload.`;
+    actions = '<button class="btn btn-ghost" data-act="dismiss-error">Dismiss</button><button class="btn btn-primary" data-act="backup">Back up now</button>';
+  } else if(damagedRaw){
+    cls = 'warn';
+    msg = '<strong>Your saved binder couldn\'t be read</strong>, so the app started fresh. A copy of the old data was kept safe in this browser. Download it so it can be repaired.';
+    actions = '<button class="btn btn-primary" data-act="damaged">Download damaged copy</button>';
+  } else if(storageUsed > STORAGE_SOFT_LIMIT){
+    cls = 'warn';
+    msg = `<strong>Browser storage is ${Math.round(storageUsed / 50000)}% full.</strong> Back up now, and consider deleting old notes or moving a finished topic out by backing it up.`;
+    actions = '<button class="btn btn-primary" data-act="backup">Back up now</button>';
+  } else if(typeof autoState !== 'undefined' && autoState === 'conflict'){
+    cls = 'warn';
+    msg = '<strong>Your auto-backup file has notes that aren\'t in this binder.</strong> Nothing has been overwritten. Choose what to keep.';
+    actions = '<button class="btn btn-ghost" data-act="auto-keep">Keep this binder</button><button class="btn btn-primary" data-act="auto-restore">Load notes from the file</button>';
+  } else if(typeof autoState !== 'undefined' && autoState === 'reconnect'){
+    cls = 'warn';
+    msg = '<strong>Auto-backup is paused.</strong> Your browser asks again for permission after a restart. One click turns it back on.';
+    actions = '<button class="btn btn-primary" data-act="auto-reconnect">Turn auto-backup back on</button>';
+  } else if(typeof autoState !== 'undefined' && autoState === 'error'){
+    cls = 'danger';
+    msg = '<strong>Auto-backup couldn\'t save to its file.</strong> It may have been moved, renamed or deleted.';
+    actions = '<button class="btn btn-primary" data-act="auto-choose">Choose the file again</button>';
+  } else if(freshStart && !hasOwnContent && !freshDismissed){
+    cls = '';
+    msg = '<strong>This binder is empty.</strong> If you had notes before (for example, after clearing your browser), press Restore and pick your backup file, such as <strong>study-binder-autobackup.json</strong>.';
+    actions = '<button class="btn btn-ghost" data-act="fresh-dismiss">I\'m starting fresh</button><button class="btn btn-primary" data-act="restore-file">Restore from a file</button>';
+  } else if(typeof autoState !== 'undefined' && autoState === 'on'){
+    // auto-backup is keeping a file up to date, so no reminder needed
+  } else if(hasOwnContent && lastChange > lastBackup && Date.now() > snoozeUntil &&
+            (!lastBackup || daysSince(lastBackup) >= BACKUP_EVERY_DAYS)){
+    cls = '';
+    msg = lastBackup
+      ? `<strong>It's been ${daysSince(lastBackup)} days since your last backup.</strong> Your notes only live in this browser, so a quick backup protects them.`
+      : '<strong>You haven\'t backed up your binder yet.</strong> Your notes only live in this browser. Clearing browsing data would erase them, so keep a backup file somewhere safe.';
+    actions = '<button class="btn btn-ghost" data-act="snooze">Remind me tomorrow</button>' +
+      (autoSupported() ? '<button class="btn btn-ghost" data-act="auto-open">Set up auto-backup</button>' : '') +
+      '<button class="btn btn-primary" data-act="backup">Back up now</button>';
+  }
+  if(!msg){ host.innerHTML = ''; return; }
+  host.innerHTML = `<div class="safety-banner ${cls}"><span class="msg">${msg}</span>${actions}</div>`;
+  host.querySelectorAll('[data-act]').forEach(btn => btn.addEventListener('click', () => {
+    const act = btn.getAttribute('data-act');
+    if(act === 'backup') backupNow();
+    if(act === 'auto-keep') keepThisBinderInFile();
+    if(act === 'auto-restore') restoreFromAutoFile();
+    if(act === 'auto-reconnect') reconnectAutoBackup();
+    if(act === 'auto-choose') chooseAutoFile();
+    if(act === 'auto-open'){ autoPanelOpen = true; renderAutoBackupUI(); }
+    if(act === 'fresh-dismiss'){ freshDismissed = true; renderSafetyBanner(); }
+    if(act === 'restore-file') $('restoreInput').click();
+    if(act === 'snooze'){ lsSet(SNOOZE_KEY, Date.now() + 86400000); renderSafetyBanner(); }
+    if(act === 'dismiss-error'){ appError = null; renderSafetyBanner(); }
+    if(act === 'damaged'){
+      downloadJson(damagedRaw, `study-binder-damaged-${stamp()}.json`);
+      try{ localStorage.removeItem(CORRUPT_KEY); }catch(e){}
+      savesPaused = false;
+      damagedRaw = null;
+      saveData();
+      render();
+    }
+  }));
+}
+
+// Show unexpected errors in the banner instead of letting the page silently break.
+window.addEventListener('error', (e) => {
+  if(!e.message) return;
+  appError = e.message;
+  try{ renderSafetyBanner(); }catch(err){}
+});
+window.addEventListener('unhandledrejection', (e) => {
+  appError = (e.reason && e.reason.message) || String(e.reason);
+  try{ renderSafetyBanner(); }catch(err){}
+});
+
+// Keep two open copies of the binder from overwriting each other.
+window.addEventListener('storage', (e) => {
+  if(e.key !== STORE_KEY || !e.newValue) return;
+  if(editingNoteId){ externalChange = true; return; }
+  try{
+    data = sanitizeBinder(JSON.parse(e.newValue));
+    storageUsed = e.newValue.length;
+    if(!data.topics.find(t => t.id === activeTopicId)) activeTopicId = data.topics.length ? data.topics[0].id : null;
+    render();
+    setStatus('Updated from another tab');
+  }catch(err){}
+});
+
+function topicColor(topic, index){ return topic.color || COLORS[index % COLORS.length]; }
+function escapeHtml(str){ const d = document.createElement('div'); d.textContent = str==null?'':str; return d.innerHTML; }
+
+// ---- lightweight Markdown (safe: escapes HTML first) ----
+function mdInline(s){
+  return s
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, '$1<em>$2</em>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)"]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+}
+function renderMarkdown(src){
+  const lines = escapeHtml(src || '').split('\n');
+  let html = '', list = null, para = [];
+  const flushPara = () => { if(para.length){ html += '<p>' + para.map(mdInline).join('<br>') + '</p>'; para = []; } };
+  const closeList = () => { if(list){ html += `</${list}>`; list = null; } };
+  lines.forEach(line => {
+    let m;
+    if((m = line.match(/^(#{1,3})\s+(.*)$/))){
+      flushPara(); closeList();
+      const n = m[1].length;
+      html += `<h${n}>${mdInline(m[2])}</h${n}>`;
+    } else if((m = line.match(/^\s*[-*•]\s+(.*)$/))){
+      flushPara();
+      if(list !== 'ul'){ closeList(); html += '<ul>'; list = 'ul'; }
+      html += `<li>${mdInline(m[1])}</li>`;
+    } else if((m = line.match(/^\s*\d+[.)]\s+(.*)$/))){
+      flushPara();
+      if(list !== 'ol'){ closeList(); html += '<ol>'; list = 'ol'; }
+      html += `<li>${mdInline(m[1])}</li>`;
+    } else if(!line.trim()){
+      flushPara(); closeList();
+    } else {
+      closeList(); para.push(line);
+    }
+  });
+  flushPara(); closeList();
+  return html;
+}
+function stripMarkdown(src){
+  return (src || '')
+    .replace(/^\s*#{1,3}\s+/gm, '')
+    .replace(/^\s*[-*•]\s+/gm, '• ')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, '$1$2')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
+}
+
+function daysUntil(dateStr){
+  if(!dateStr) return null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const due = new Date(dateStr + 'T00:00:00');
+  return Math.round((due - today) / 86400000);
+}
+
+function formatUKDate(dateStr){
+  if(!dateStr) return '';
+  const [y,m,d] = dateStr.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function dueLabel(dateStr){
+  const d = daysUntil(dateStr);
+  if(d === null) return null;
+  const fullDate = formatUKDate(dateStr);
+
+  if(d < 0){
+    const days = Math.abs(d);
+    return { text: `overdue by ${days} day${days===1?'':'s'}`, cls: 'overdue', fullDate };
+  }
+  if(d === 0) return { text: 'due today', cls: 'soon', fullDate };
+  if(d < 14){
+    return { text: `${d} day${d===1?'':'s'} left`, cls: d<=3?'soon':'', fullDate };
+  }
+  if(d < 30){
+    const weeks = Math.round(d/7);
+    return { text: `${weeks} week${weeks===1?'':'s'} left`, cls: '', fullDate };
+  }
+  const months = Math.round(d/30);
+  return { text: `${months} month${months===1?'':'s'} left`, cls: '', fullDate };
+}
+
+function renderSpine(){
+  const spine = $('spine');
+  spine.innerHTML = '';
+  for(let i=0;i<8;i++){ const h = document.createElement('div'); h.className='hole'; spine.appendChild(h); }
+}
+
+function renderTabs(){
+  const tabsEl = $('tabs');
+  tabsEl.innerHTML = '';
+
+  data.topics.forEach((topic, i) => {
+    const count = data.notes.filter(n => n.topicId === topic.id).length;
+    const tab = document.createElement('div');
+    tab.className = 'tab' + (topic.id === activeTopicId ? ' active' : '');
+    tab.style.background = topicColor(topic, i);
+    const due = dueLabel(topic.dueDate);
+    tab.innerHTML = `
+      <div class="tab-top">
+        <span class="tab-name" title="${escapeHtml(topic.name)}">${escapeHtml(topic.name)}</span>
+        <span style="display:flex;align-items:center;gap:6px;">
+          <span class="tab-count">${count}</span>
+          <button class="tab-del" title="Delete topic" draggable="false" data-topic="${topic.id}">✕</button>
+        </span>
+      </div>
+      ${due ? `<div class="tab-due ${due.cls}" title="Due ${escapeHtml(due.fullDate)}">${escapeHtml(due.text)}</div>` : ''}
+    `;
+    tab.draggable = true;
+    tab.title = 'Drag to reorder';
+    tab.addEventListener('dragstart', (e) => {
+      dragTopicId = topic.id;
+      tab.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      try{ e.dataTransfer.setData('text/plain', topic.id); }catch(err){}
+    });
+    tab.addEventListener('dragend', () => {
+      dragTopicId = null;
+      tabsEl.querySelectorAll('.tab').forEach(t => t.classList.remove('dragging','drop-before','drop-after'));
+    });
+    tab.addEventListener('dragover', (e) => {
+      if(!dragTopicId || dragTopicId === topic.id) return;
+      e.preventDefault();
+      const r = tab.getBoundingClientRect();
+      const after = e.clientY > r.top + r.height/2;
+      tab.classList.toggle('drop-after', after);
+      tab.classList.toggle('drop-before', !after);
+    });
+    tab.addEventListener('dragleave', () => tab.classList.remove('drop-before','drop-after'));
+    tab.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if(!dragTopicId || dragTopicId === topic.id) return;
+      const r = tab.getBoundingClientRect();
+      moveTopic(dragTopicId, topic.id, e.clientY > r.top + r.height/2);
+    });
+    tab.addEventListener('click', (e) => {
+      if(e.target.closest('.tab-del')) return;
+      activeTopicId = topic.id;
+      searchQuery = ''; $('searchInput').value = '';
+      searchScope = 'topic';
+      render();
+    });
+    tabsEl.appendChild(tab);
+  });
+
+  tabsEl.querySelectorAll('.tab-del').forEach(btn => {
+    btn.addEventListener('mousedown', (e) => e.stopPropagation());
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteTopic(btn.getAttribute('data-topic'));
+    });
+  });
+
+  const addBtn = document.createElement('button');
+  addBtn.className = 'add-tab-btn';
+  addBtn.textContent = '+ Add topic';
+  addBtn.addEventListener('click', () => showAddTopicForm(tabsEl, addBtn));
+  tabsEl.appendChild(addBtn);
+}
+
+let dragTopicId = null;
+function moveTopic(fromId, toId, after){
+  const from = data.topics.findIndex(t => t.id === fromId);
+  if(from < 0) return;
+  const [moved] = data.topics.splice(from, 1);
+  let to = data.topics.findIndex(t => t.id === toId);
+  if(to < 0){ data.topics.splice(from, 0, moved); return; }
+  if(after) to++;
+  data.topics.splice(to, 0, moved);
+  saveData(); render();
+}
+
+function deleteTopic(topicId){
+  const topic = data.topics.find(t => t.id === topicId);
+  if(!topic) return false;
+  const noteCount = data.notes.filter(n => n.topicId === topicId).length;
+  const msg = noteCount > 0 ? `Delete "${topic.name}" and its ${noteCount} note${noteCount===1?'':'s'}?` : `Delete "${topic.name}"?`;
+  if(!confirm(msg)) return false;
+  data.topics = data.topics.filter(t => t.id !== topicId);
+  data.notes = data.notes.filter(n => n.topicId !== topicId);
+  if(activeTopicId === topicId){ activeTopicId = data.topics.length ? data.topics[0].id : null; }
+  $('topicEditForm').innerHTML = '';
+  saveData(); render();
+  return true;
+}
+
+function showAddTopicForm(tabsEl, addBtn){
+  const form = document.createElement('div');
+  form.className = 'add-tab-form';
+  form.innerHTML = `<input type="text" placeholder="Topic name" maxlength="30">`;
+  tabsEl.replaceChild(form, addBtn);
+  const input = form.querySelector('input');
+  input.focus();
+  let done = false;   // Enter/Escape re-render the tabs, which fires blur: only act once
+  function commit(){
+    if(done) return;
+    done = true;
+    const name = input.value.trim();
+    if(name){
+      data.topics.push({ id: uid(), name, color: nextFreeColor(), dueDate: null, flashcards: [] });
+      activeTopicId = data.topics[data.topics.length-1].id;
+      saveData();
+    }
+    render();
+  }
+  input.addEventListener('keydown', (e) => { if(e.key==='Enter') commit(); if(e.key==='Escape'){ done = true; render(); } });
+  input.addEventListener('blur', commit);
+}
+
+function currentTopic(){ return data.topics.find(t => t.id === activeTopicId); }
+
+function renderHeader(){
+  const topic = currentTopic();
+  const title = $('topicTitle');
+  const meta = $('topicMeta');
+  const editBtn = $('editTopicBtn');
+  const flashBtn = $('flashcardsBtn');
+  const printBtn = $('printBtn');
+
+  if(searchQuery.trim()){
+    title.innerHTML = `Results for "${escapeHtml(searchQuery)}"`;
+    meta.textContent = searchScope === 'all' ? 'searching every topic' : `searching in ${topic ? topic.name : 'this topic'}`;
+    meta.className = 'topic-meta';
+    editBtn.style.display = 'none';
+    flashBtn.style.display = 'none';
+    printBtn.style.display = 'none';
+  } else if(topic){
+    const idx = data.topics.indexOf(topic);
+    title.innerHTML = `<span class="topic-swatch" style="background:${topicColor(topic, idx)}"></span>${escapeHtml(topic.name)}`;
+    const due = dueLabel(topic.dueDate);
+    meta.textContent = due ? due.text : '';
+    meta.title = due ? `Due ${due.fullDate}` : '';
+    meta.className = 'topic-meta' + (due ? ' ' + due.cls : '');
+    editBtn.style.display = 'inline-block';
+    flashBtn.style.display = 'inline-block';
+    printBtn.style.display = 'inline-block';
+  } else {
+    title.textContent = 'No topics yet';
+    meta.textContent = '';
+    editBtn.style.display = 'none';
+    flashBtn.style.display = 'none';
+    printBtn.style.display = 'none';
+  }
+  $('newNoteBtn').style.display = (!searchQuery.trim() && topic) ? 'inline-block' : 'none';
+}
+
+function renderSearchScope(){
+  const el = $('searchScope');
+  if(!searchQuery.trim()){ el.innerHTML = ''; return; }
+  const topic = currentTopic();
+  el.innerHTML = `
+    <button class="scope-btn ${searchScope==='topic'?'active':''}" data-scope="topic" ${!topic?'disabled':''}>In ${topic ? escapeHtml(topic.name) : 'this topic'}</button>
+    <button class="scope-btn ${searchScope==='all'?'active':''}" data-scope="all">All topics</button>
+  `;
+  el.querySelectorAll('.scope-btn').forEach(btn => {
+    btn.addEventListener('click', () => { searchScope = btn.getAttribute('data-scope'); renderHeader(); renderSearchScope(); renderCards(); });
+  });
+}
+
+function buildSnippet(text, q){
+  text = text || '';
+  if(!q){ return escapeHtml(text.slice(0,140)); }
+  const lower = text.toLowerCase();
+  const idx = lower.indexOf(q.toLowerCase());
+  if(idx === -1){ return escapeHtml(text.slice(0,140)) + (text.length>140?'…':''); }
+  const start = Math.max(0, idx-40);
+  const end = Math.min(text.length, idx+q.length+60);
+  const before = escapeHtml(text.slice(start, idx));
+  const match = escapeHtml(text.slice(idx, idx+q.length));
+  const after = escapeHtml(text.slice(idx+q.length, end));
+  return (start>0?'…':'') + before + '<mark>' + match + '</mark>' + after + (end<text.length?'…':'');
+}
+
+function renderCards(){
+  const cardsEl = $('cards');
+  const emptyEl = $('emptyState');
+  cardsEl.innerHTML = '';
+
+  const q = searchQuery.trim();
+  let notesToShow;
+
+  if(q){
+    const pool = searchScope === 'all' ? data.notes : data.notes.filter(n => n.topicId === activeTopicId);
+    const ql = q.toLowerCase();
+    notesToShow = pool.filter(n => n.title.toLowerCase().includes(ql) || n.content.toLowerCase().includes(ql));
+  } else {
+    notesToShow = data.notes.filter(n => n.topicId === activeTopicId);
+  }
+
+  // keep notes in the order they were added (oldest first); opening or editing one doesn't move it
+
+  if(notesToShow.length === 0){
+    emptyEl.style.display = 'block';
+    emptyEl.querySelector('h2').textContent = q ? 'No matches' : 'Nothing here yet';
+    emptyEl.querySelector('p').textContent = q ? 'Try a different word, or search all topics.' : 'Add your first note with the button above.';
+    return;
+  }
+  emptyEl.style.display = 'none';
+
+  notesToShow.forEach(note => {
+    const topic = data.topics.find(t => t.id === note.topicId);
+    const idx = data.topics.indexOf(topic);
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.borderTopColor = topic ? topicColor(topic, idx) : '#999';
+
+    const titleHtml = q ? buildSnippet(note.title || 'Untitled', q) : escapeHtml(note.title || 'Untitled');
+    const bodyText = stripMarkdown(note.content);
+    const bodyHtml = q ? buildSnippet(bodyText, q) : escapeHtml(bodyText || '');
+    const dateStr = new Date(note.createdAt || note.updatedAt).toLocaleDateString('en-GB', {day:'numeric', month:'short'});
+    const showTopicLabel = q && searchScope === 'all';
+
+    card.innerHTML = `
+      ${showTopicLabel ? `<span class="search-topic-label" style="background:${topic?topicColor(topic,idx):'#999'}">${escapeHtml(topic?topic.name:'Unknown')}</span>` : ''}
+      <h3>${titleHtml}</h3>
+      <p>${bodyHtml}</p>
+      <div class="meta">
+        <span>${note.createdAt ? 'Added' : 'Updated'} ${dateStr}</span>
+        ${note.attachments && note.attachments.length ? `<span class="clip">📎 ${note.attachments.length}</span>` : ''}
+        ${note.relatedReading && note.relatedReading.length ? `<span class="clip">🔗 ${note.relatedReading.length}</span>` : ''}
+      </div>
+    `;
+    card.addEventListener('click', () => openEditor(note.id));
+    cardsEl.appendChild(card);
+  });
+}
+
+function renderAttachList(){
+  const listEl = $('attachList');
+  listEl.innerHTML = '';
+  pendingAttachments.forEach(att => {
+    const row = document.createElement('div');
+    row.className = 'attach-item';
+    const isImg = IMG_RE.test(att.url);
+    row.innerHTML = `
+      ${isImg ? `<img src="${escapeHtml(att.url)}" alt="">` : `<span class="attach-icon">📄</span>`}
+      <a href="${escapeHtml(att.url)}" target="_blank" rel="noopener">${escapeHtml(att.label || att.url)}</a>
+      <button class="attach-remove" data-id="${att.id}" title="Remove">✕</button>
+    `;
+    listEl.appendChild(row);
+  });
+  listEl.querySelectorAll('.attach-remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      pendingAttachments = pendingAttachments.filter(a => a.id !== btn.getAttribute('data-id'));
+      renderAttachList();
+    });
+  });
+}
+
+function openEditor(noteId){
+  editingNoteId = noteId;
+  const note = data.notes.find(n => n.id === noteId);
+  $('editTitle').value = note ? note.title : '';
+  $('editContent').value = note ? note.content : '';
+  pendingAttachments = note ? JSON.parse(JSON.stringify(note.attachments || [])) : [];
+  editorSnapshot = editorState();
+  setPreview(false);
+  renderAttachList();
+  $('attachUrl').value = ''; $('attachLabel').value = '';
+  $('deleteNoteBtn').style.display = note ? 'inline-block' : 'none';
+  renderRelatedInline(note);
+  renderSidebar();
+  $('overlay').classList.add('open');
+  document.body.classList.add('editor-open');
+  $('editTitle').focus();
+}
+
+let editorSnapshot = '';
+function editorState(){
+  return JSON.stringify([$('editTitle').value, $('editContent').value, pendingAttachments]);
+}
+
+function closeEditor(){
+  $('overlay').classList.remove('open');
+  document.body.classList.remove('editor-open');
+  editingNoteId = null;
+  pendingAttachments = [];
+  renderSidebar();
+}
+
+function render(){ renderSpine(); renderTabs(); renderHeader(); renderSearchScope(); renderCards(); renderRelatedHost(); renderDeadlines(); renderSafetyBanner(); }
+
+// ---- note formatting toolbar ----
+let previewOn = false;
+function setPreview(on){
+  previewOn = on;
+  $('mdPreviewBtn').classList.toggle('active', on);
+  $('mdPreviewBtn').textContent = on ? 'Edit' : 'Preview';
+  if(on) $('mdPreview').innerHTML = renderMarkdown($('editContent').value) || '<p style="color:var(--ink-soft)">Nothing to preview yet.</p>';
+  $('mdPreview').style.display = on ? 'block' : 'none';
+  $('editContent').style.display = on ? 'none' : 'block';
+  document.querySelectorAll('.md-btn[data-md]').forEach(b => b.disabled = on);
+}
+$('mdPreviewBtn').addEventListener('click', () => setPreview(!previewOn));
+
+function applyFormat(kind){
+  const ta = $('editContent');
+  const v = ta.value, a = ta.selectionStart, b = ta.selectionEnd;
+  if(kind === 'bold' || kind === 'italic'){
+    const mark = kind === 'bold' ? '**' : '*';
+    const sel = v.slice(a, b) || (kind === 'bold' ? 'bold text' : 'italic text');
+    ta.value = v.slice(0, a) + mark + sel + mark + v.slice(b);
+    ta.setSelectionRange(a + mark.length, a + mark.length + sel.length);
+  } else {
+    const start = v.lastIndexOf('\n', a - 1) + 1;
+    let end = v.indexOf('\n', b); if(end === -1) end = v.length;
+    const block = v.slice(start, end).split('\n').map((line, i) => {
+      const bare = line.replace(/^(#{1,3}\s+|\s*[-*•]\s+|\s*\d+[.)]\s+)/, '');
+      if(kind === 'h2') return '## ' + bare;
+      if(kind === 'ul') return '- ' + bare;
+      return (i + 1) + '. ' + bare;
+    }).join('\n');
+    ta.value = v.slice(0, start) + block + v.slice(end);
+    ta.setSelectionRange(start, start + block.length);
+  }
+  ta.dispatchEvent(new Event('input', { bubbles: true }));
+  ta.focus();
+}
+document.querySelectorAll('.md-btn[data-md]').forEach(btn => {
+  btn.addEventListener('click', () => applyFormat(btn.getAttribute('data-md')));
+});
+
+// ---- deadlines ----
+let deadlinesOpen = false;
+function renderDeadlines(){
+  const host = $('deadlinesHost');
+  if(!deadlinesOpen){ host.innerHTML = ''; return; }
+  const dated = data.topics.filter(t => t.dueDate).sort((a,b) => a.dueDate.localeCompare(b.dueDate));
+  const undated = data.topics.length - dated.length;
+  const rows = dated.map(t => {
+    const due = dueLabel(t.dueDate);
+    const idx = data.topics.indexOf(t);
+    const count = data.notes.filter(n => n.topicId === t.id).length;
+    return `<div class="deadline-row" data-topic="${t.id}">
+      <span class="topic-swatch" style="background:${topicColor(t, idx)}"></span>
+      <span class="deadline-name">${escapeHtml(t.name)} <span class="deadline-date">· ${count} note${count===1?'':'s'}</span></span>
+      <span class="deadline-date">${escapeHtml(due.fullDate)}</span>
+      <span class="deadline-left ${due.cls}">${escapeHtml(due.text)}</span>
+    </div>`;
+  }).join('');
+  host.innerHTML = `<div class="deadlines-panel">
+    <div class="deadlines-head"><h3>📅 Upcoming deadlines</h3><button class="related-close" id="deadlinesClose">✕</button></div>
+    ${dated.length ? rows : '<div class="deadlines-empty">No due dates yet. Press ✎ next to a topic name to add one.</div>'}
+    ${dated.length && undated ? `<div class="deadlines-empty" style="margin-top:8px;">${undated} topic${undated===1?' has':'s have'} no due date.</div>` : ''}
+  </div>`;
+  $('deadlinesClose').addEventListener('click', () => { deadlinesOpen = false; renderDeadlines(); });
+  host.querySelectorAll('.deadline-row').forEach(row => row.addEventListener('click', () => {
+    activeTopicId = row.getAttribute('data-topic');
+    searchQuery = ''; $('searchInput').value = ''; searchScope = 'topic';
+    render();
+  }));
+}
+$('deadlinesBtn').addEventListener('click', () => { deadlinesOpen = !deadlinesOpen; renderDeadlines(); });
+
+// ---- dark mode ----
+function isDark(){
+  const set = document.documentElement.getAttribute('data-theme');
+  if(set) return set === 'dark';
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+function renderThemeBtn(){ $('themeBtn').textContent = isDark() ? '☀ Light mode' : '🌙 Dark mode'; }
+$('themeBtn').addEventListener('click', () => {
+  const next = isDark() ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  lsSet('binder-theme', next);
+  renderThemeBtn();
+});
+
+// ---- topic edit ----
+$('editTopicBtn').addEventListener('click', () => {
+  const topic = currentTopic();
+  if(!topic) return;
+  const container = $('topicEditForm');
+  container.innerHTML = `
+    <div class="topic-edit-form">
+      <label>Topic name</label>
+      <input type="text" id="topicNameInput" value="${escapeHtml(topic.name)}" maxlength="30">
+      <label>Due date (optional)</label>
+      <input type="date" id="topicDueInput" value="${topic.dueDate || ''}">
+      <label>Colour</label>
+      <div class="swatches" id="topicSwatches">
+        ${PALETTE.map(c => `<button class="swatch ${c===topicColor(topic, data.topics.indexOf(topic))?'selected':''}" data-color="${c}" style="background:${c}" title="${c}"></button>`).join('')}
+      </div>
+      <label>Position</label>
+      <div class="order-row">
+        <button class="btn btn-ghost" id="topicUpBtn">↑ Move up</button>
+        <button class="btn btn-ghost" id="topicDownBtn">↓ Move down</button>
+      </div>
+      <div class="topic-edit-actions">
+        <button class="btn btn-danger" id="topicDeleteBtn" style="margin-right:auto;">Delete topic</button>
+        <button class="btn btn-ghost" id="topicEditCancel">Cancel</button>
+        <button class="btn btn-primary" id="topicEditSave">Save</button>
+      </div>
+    </div>
+  `;
+  $('topicEditCancel').addEventListener('click', () => { container.innerHTML=''; });
+  let chosenColor = topicColor(topic, data.topics.indexOf(topic));
+  container.querySelectorAll('.swatch').forEach(sw => {
+    sw.addEventListener('click', () => {
+      chosenColor = sw.getAttribute('data-color');
+      container.querySelectorAll('.swatch').forEach(x => x.classList.toggle('selected', x === sw));
+    });
+  });
+  function nudge(dir){
+    const i = data.topics.indexOf(topic), j = i + dir;
+    if(j < 0 || j >= data.topics.length) return;
+    [data.topics[i], data.topics[j]] = [data.topics[j], data.topics[i]];
+    saveData(); renderTabs();
+  }
+  $('topicDeleteBtn').addEventListener('click', () => deleteTopic(topic.id));
+  $('topicUpBtn').addEventListener('click', () => nudge(-1));
+  $('topicDownBtn').addEventListener('click', () => nudge(1));
+  $('topicEditSave').addEventListener('click', () => {
+    topic.color = chosenColor;
+    const name = $('topicNameInput').value.trim();
+    if(name) topic.name = name;
+    topic.dueDate = $('topicDueInput').value || null;
+    saveData();
+    container.innerHTML = '';
+    render();
+  });
+});
+
+// ---- attachments ----
+$('attachAddBtn').addEventListener('click', () => {
+  const url = $('attachUrl').value.trim();
+  const label = $('attachLabel').value.trim();
+  if(!url) return;
+  let finalUrl = url;
+  if(!/^[a-z][a-z0-9+.-]*:/i.test(finalUrl)) finalUrl = 'https://' + finalUrl;
+  if(!isSafeUrl(finalUrl)){ setStatus('Only web links (https://...) can be attached'); return; }
+  pendingAttachments.push({ id: uid(), url: finalUrl, label });
+  $('attachUrl').value = ''; $('attachLabel').value = '';
+  renderAttachList();
+});
+
+// ---- voice capture ----
+// ---- voice sidebar ----
+let recognition = null;
+let isListening = false;
+let liveTranscript = '';
+let interimText = '';
+let currentSummary = '';
+let currentSummaryLevel = null;
+let isSummarizing = false;
+
+function getRecognition(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR) return null;
+  const r = new SR();
+  r.continuous = true;
+  r.interimResults = true;
+  r.lang = 'en-GB';
+  return r;
+}
+
+const VOICE_STORE = 'binder-voice';
+function saveVoice(){
+  try{ localStorage.setItem(VOICE_STORE, JSON.stringify({ transcript: liveTranscript, summary: currentSummary, level: currentSummaryLevel })); }catch(e){}
+}
+function loadVoice(){
+  try{
+    const v = JSON.parse(localStorage.getItem(VOICE_STORE) || 'null');
+    if(v){ liveTranscript = v.transcript || ''; currentSummary = v.summary || ''; currentSummaryLevel = v.level || null; }
+  }catch(e){}
+}
+
+function setVoiceStatus(text){ $('voiceStatus').textContent = text; $('editorVoiceStatus').textContent = text; }
+$('editorMicBtn').addEventListener('click', () => $('micBtn').click());
+
+function renderSidebar(){
+  const hasTranscript = liveTranscript.trim().length > 0;
+
+  $('micBtn').classList.toggle('listening', isListening);
+  $('micBtnText').textContent = isListening ? '⏹ Stop listening' : '🎙 Start listening';
+
+  const box = $('voiceLive');
+  const display = liveTranscript + interimText;
+  if(display.trim()){
+    box.textContent = display;
+    box.classList.remove('empty-hint');
+  } else {
+    box.textContent = 'Nothing recorded yet — press start and begin speaking.';
+    box.classList.add('empty-hint');
+  }
+
+  const labels = { quick: 'Quick brief', normal: 'Normal', detailed: 'Detailed' };
+  ['quick','normal','detailed'].forEach(level => {
+    const btn = $(level + 'SummaryBtn');
+    btn.disabled = !hasTranscript || isSummarizing;
+    btn.classList.toggle('active', currentSummaryLevel === level && !!currentSummary);
+    btn.textContent = (isSummarizing && currentSummaryLevel === level) ? 'Summarising…' : labels[level];
+  });
+
+  const resultEl = $('summaryResult');
+  if(currentSummary){
+    resultEl.textContent = currentSummary;
+    resultEl.classList.remove('empty-hint');
+  } else if(isSummarizing){
+    resultEl.textContent = 'Summarising…';
+    resultEl.classList.add('empty-hint');
+  } else {
+    resultEl.textContent = 'Choose a length above once you\'ve stopped recording.';
+    resultEl.classList.add('empty-hint');
+  }
+
+  $('insertVoiceBtn').disabled = !editingNoteId || (!hasTranscript && !currentSummary);
+  $('editorInsertVoiceBtn').disabled = !(hasTranscript || currentSummary);
+  $('editorMicBtn').textContent = isListening ? '⏹ Stop listening' : '🎙 Start listening';
+  $('editorMicBtn').classList.toggle('btn-primary', isListening);
+  const liveText = (liveTranscript + interimText).trim();
+  $('editorVoiceLive').textContent = liveText ? '…' + liveText.slice(-300) : '';
+
+  const hint = $('insertHint');
+  if(!editingNoteId && (hasTranscript || currentSummary)){
+    hint.textContent = '↑ Open or create a note to enable "Insert into note"';
+  } else {
+    hint.textContent = '';
+  }
+  $('clearVoiceBtn').disabled = !hasTranscript && !currentSummary;
+}
+
+function stopListening(){
+  if(recognition){ try{ recognition.stop(); }catch(e){} }
+  isListening = false;
+  interimText = '';
+  renderSidebar();
+}
+
+$('micBtn').addEventListener('click', () => {
+  if(isListening){
+    stopListening();
+    setVoiceStatus('Stopped. Choose a summary length below, or insert the raw transcript.');
+    return;
+  }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){
+    setVoiceStatus('Live transcription isn\'t supported in this browser — try Chrome.');
+    return;
+  }
+  setVoiceStatus('Listening…');
+  recognition = getRecognition();
+  recognition.onresult = (event) => {
+    interimText = '';
+    for(let i = event.resultIndex; i < event.results.length; i++){
+      const chunk = event.results[i][0].transcript;
+      if(event.results[i].isFinal){ liveTranscript += chunk + ' '; saveVoice(); }
+      else{ interimText += chunk; }
+    }
+    renderSidebar();
+    const box = $('voiceLive'); box.scrollTop = box.scrollHeight;
+  };
+  recognition.onerror = (event) => {
+    setVoiceStatus(event.error === 'not-allowed' ? 'Microphone access was blocked.' : `Error: ${event.error}`);
+    stopListening();
+  };
+  recognition.onend = () => { if(isListening){ try{ recognition.start(); }catch(e){} } };
+
+  try{
+    recognition.start();
+    isListening = true;
+    renderSidebar();
+  }catch(e){
+    setVoiceStatus('Could not start the microphone.');
+  }
+});
+
+async function summarizeAtLevel(level){
+  const text = liveTranscript.trim();
+  if(!text) return;
+  if(!getGeminiKey()){
+    setVoiceStatus('Add your Google API key (🔑 top left) to generate summaries.');
+    return;
+  }
+  isSummarizing = true;
+  currentSummaryLevel = level;
+  renderSidebar();
+
+  const instructions = {
+    quick: 'in just 2-3 short bullet points — only the headline takeaways',
+    normal: 'in a clear set of 5-8 bullet points covering the key ideas and any important details',
+    detailed: 'in a thorough, detailed summary — use short headed sections if that helps, and cover all key points, examples, and nuances discussed; don\'t leave anything significant out'
+  };
+  try{
+    const prompt = `Summarise the following transcript for a student's study notes, ${instructions[level]}. Respond in the same language as the transcript. If it is in English, use British English spelling and grammar (for example colour, organise, colonising, centre). Return only the summary, no preamble.\n\nTranscript:\n${text}`;
+    currentSummary = await callGemini(prompt);
+    setVoiceStatus('Summary ready.');
+  }catch(e){
+    currentSummary = '';
+    setVoiceStatus(e.message === 'NO_KEY' ? 'Add your Google API key (🔑 top left) to generate summaries.' : `Summary failed: ${e.message}`);
+  }
+  isSummarizing = false;
+  saveVoice();
+  renderSidebar();
+}
+
+$('quickSummaryBtn').addEventListener('click', () => summarizeAtLevel('quick'));
+$('normalSummaryBtn').addEventListener('click', () => summarizeAtLevel('normal'));
+$('detailedSummaryBtn').addEventListener('click', () => summarizeAtLevel('detailed'));
+
+function insertVoiceIntoNote(){
+  if(!editingNoteId) return;
+  const transcript = liveTranscript.trim();
+  if(!transcript && !currentSummary) return;
+  let block = '';
+  if(transcript) block += `\n\n--- Transcript (${new Date().toLocaleString('en-GB')}) ---\n${transcript}`;
+  if(currentSummary) block += `\n\n--- Summary (${currentSummaryLevel}) ---\n${currentSummary}`;
+  const contentEl = $('editContent');
+  contentEl.value = (contentEl.value ? contentEl.value + block : block.trim());
+  if(previewOn) setPreview(true);
+  contentEl.dispatchEvent(new Event('input', { bubbles: true }));
+  setVoiceStatus('Inserted into the open note and saved — you can keep writing.');
+}
+$('insertVoiceBtn').addEventListener('click', insertVoiceIntoNote);
+$('editorInsertVoiceBtn').addEventListener('click', insertVoiceIntoNote);
+
+$('clearVoiceBtn').addEventListener('click', () => {
+  liveTranscript = ''; interimText = ''; currentSummary = ''; currentSummaryLevel = null;
+  saveVoice();
+  setVoiceStatus('');
+  renderSidebar();
+});
+
+// ---- related reading ----
+let relatedPanel = null; // { noteId, title, status: 'loading'|'done'|'error', items: [] }
+
+function renderRelatedHost(){
+  const host = $('relatedHost');
+  if(!relatedPanel){ host.innerHTML = ''; return; }
+  const { title, status, items } = relatedPanel;
+  let inner = '';
+  if(status === 'nokey'){
+    inner = `<div class="related-loading">Add your Google API key (🔑 top left) to search for related reading.</div>`;
+  } else if(status === 'loading'){
+    inner = `<div class="related-loading">Searching for reading related to "${escapeHtml(title)}"...</div>`;
+  } else if(status === 'error'){
+    inner = `<div class="related-loading">Couldn't find related reading right now — try again from inside the note.</div>`;
+  } else if(items.length === 0){
+    inner = `<div class="related-loading">No related reading found for this note.</div>`;
+  } else {
+    inner = `<div class="related-list">${items.map(renderRelatedItem).join('')}</div>`;
+  }
+  host.innerHTML = `<div class="related-panel">
+    <div class="related-panel-head"><h3>Related reading — ${escapeHtml(title)}</h3><button class="related-close" id="relatedCloseBtn">✕</button></div>
+    ${inner}
+  </div>`;
+  const closeBtn = $('relatedCloseBtn');
+  if(closeBtn) closeBtn.addEventListener('click', () => { relatedPanel = null; renderRelatedHost(); });
+}
+
+function renderRelatedItem(it){
+  const stance = ['supports','challenges','background'].includes(it.stance) ? it.stance : 'background';
+  const query = it.query || it.label || '';
+  const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+  return `<div class="related-item">
+    <span class="stance-pill stance-${stance}">${stance}</span>
+    <a href="${escapeHtml(searchUrl)}" target="_blank" rel="noopener">${escapeHtml(it.label || query)}</a>
+    ${it.note ? `<span class="related-desc">${escapeHtml(it.note)}</span>` : ''}
+  </div>`;
+}
+
+function renderRelatedInline(note){
+  const host = $('relatedInline');
+  if(!note){ host.innerHTML = ''; return; }
+  const items = note.relatedReading || [];
+  if(items.length === 0){
+    host.innerHTML = `<div class="related-inline"><h4>Related reading</h4><button class="btn btn-ghost" id="findRelatedBtn">Find related reading</button></div>`;
+  } else {
+    host.innerHTML = `<div class="related-inline"><h4>Related reading</h4>
+      <div class="related-list">${items.map(renderRelatedItem).join('')}</div>
+      <div class="related-btn-row"><button class="btn btn-ghost" id="findRelatedBtn">Refresh</button></div>
+    </div>`;
+  }
+  const btn = $('findRelatedBtn');
+  if(btn){
+    btn.addEventListener('click', async () => {
+      btn.disabled = true; btn.textContent = 'Searching…';
+      await fetchRelatedReading(note);
+      if(editingNoteId === note.id) renderRelatedInline(note);
+    });
+  }
+}
+
+async function findRelatedReading(title, content){
+  const prompt = `A student wrote study notes titled "${title}". Notes:\n\n${(content || '').slice(0,3000)}\n\nSuggest 4-6 good search queries someone could use to find real articles or web pages about this topic — a mix of ones that would explain or support it in more depth ("supports"), ones that would surface a genuinely relevant contrasting or critical viewpoint ("challenges"), and ones that would give broader background ("background"). For each, give a short punchy label (not the raw query), a good search query, and a one-sentence note on what to look for. Respond in the same language as the notes. If it is in English, use British English spelling and grammar (for example colour, organise, colonising, centre). Respond ONLY with a JSON array, no markdown fences, no commentary, in this exact shape: [{"label":"...","query":"...","stance":"supports","note":"one short sentence"}]`;
+  const text = await callGemini(prompt, { json: true });
+  return JSON.parse(text);
+}
+
+async function fetchRelatedReading(note){
+  if(!getGeminiKey()){
+    relatedPanel = { noteId: note.id, title: note.title || 'Untitled', status: 'nokey', items: [] };
+    renderRelatedHost();
+    return;
+  }
+  relatedPanel = { noteId: note.id, title: note.title || 'Untitled', status: 'loading', items: [] };
+  renderRelatedHost();
+  try{
+    const items = await findRelatedReading(note.title, note.content);
+    note.relatedReading = Array.isArray(items) ? items : [];
+    saveData();
+    if(relatedPanel && relatedPanel.noteId === note.id){
+      relatedPanel.status = 'done';
+      relatedPanel.items = note.relatedReading;
+      renderRelatedHost();
+    }
+    renderCards();
+  }catch(e){
+    if(relatedPanel && relatedPanel.noteId === note.id){
+      relatedPanel.status = 'error';
+      renderRelatedHost();
+    }
+  }
+}
+
+// ---- Google Gemini API key (free tier, no card needed) ----
+const GEMINI_KEY_STORE = 'binder-gemini-key';
+const GEMINI_MODEL = 'gemini-3.6-flash';
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+
+function getGeminiKey(){ try{ return localStorage.getItem(GEMINI_KEY_STORE) || ''; }catch(e){ return ''; } }
+function setGeminiKey(key){ try{ if(key){ localStorage.setItem(GEMINI_KEY_STORE, key); } else { localStorage.removeItem(GEMINI_KEY_STORE); } }catch(e){} }
+
+async function callGemini(prompt, opts, attempt){
+  attempt = attempt || 1;
+  const key = getGeminiKey();
+  if(!key){ throw new Error('NO_KEY'); }
+  const body = { contents: [{ parts: [{ text: prompt }] }] };
+  if(opts && opts.json){ body.generationConfig = { responseMimeType: 'application/json' }; }
+  const response = await fetch(GEMINI_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+    body: JSON.stringify(body)
+  });
+  if(!response.ok){
+    const errBody = await response.json().catch(() => ({}));
+    const message = errBody?.error?.message || `Request failed (${response.status})`;
+    const isOverloaded = response.status === 503 || /high demand|overloaded|unavailable/i.test(message);
+    if(isOverloaded && attempt < 3){
+      await new Promise(r => setTimeout(r, attempt * 1500));
+      return callGemini(prompt, opts, attempt + 1);
+    }
+    throw new Error(message);
+  }
+  const data = await response.json();
+  const parts = data.candidates && data.candidates[0] && data.candidates[0].content ? data.candidates[0].content.parts : [];
+  return (parts || []).map(p => p.text || '').join('\n').trim();
+}
+
+let apiKeyPanelOpen = false;
+
+function renderApiKeyPanel(){
+  const host = $('apiKeyPanel');
+  if(!apiKeyPanelOpen){ host.innerHTML = ''; return; }
+  const current = getGeminiKey();
+  host.innerHTML = `
+    <div class="topic-edit-form" style="margin-top:8px; max-width:360px;">
+      <label>Google (Gemini) API key</label>
+      <input type="password" id="apiKeyInput" value="${escapeHtml(current)}" placeholder="AIza...">
+      <div class="topic-edit-actions">
+        ${current ? '<button class="btn btn-danger" id="apiKeyClearBtn">Remove</button>' : ''}
+        <button class="btn btn-ghost" id="apiKeyCancelBtn">Cancel</button>
+        <button class="btn btn-primary" id="apiKeySaveBtn">Save</button>
+      </div>
+      <div class="voice-note" style="margin-top:8px; font-size:11px; color:var(--ink-soft); line-height:1.5;">
+        Get a free key at aistudio.google.com → Get API key. No card needed. It's stored only in this browser and powers voice summaries, flashcards, and related reading.
+      </div>
+    </div>
+  `;
+  $('apiKeySaveBtn').addEventListener('click', () => {
+    const val = $('apiKeyInput').value.trim();
+    setGeminiKey(val);
+    apiKeyPanelOpen = false;
+    renderApiKeyPanel();
+    setStatus(val ? 'API key saved' : 'API key removed');
+  });
+  $('apiKeyCancelBtn').addEventListener('click', () => { apiKeyPanelOpen = false; renderApiKeyPanel(); });
+  const clearBtn = $('apiKeyClearBtn');
+  if(clearBtn){
+    clearBtn.addEventListener('click', () => {
+      setGeminiKey('');
+      apiKeyPanelOpen = false;
+      renderApiKeyPanel();
+      setStatus('API key removed');
+    });
+  }
+}
+
+$('apiKeyBtn').addEventListener('click', () => { apiKeyPanelOpen = !apiKeyPanelOpen; renderApiKeyPanel(); });
+
+// ---- backup / restore ----
+$('backupBtn').addEventListener('click', backupNow);
+
+$('restoreBtn').addEventListener('click', () => { $('restoreInput').click(); });
+
+// Replace the binder with a backup's contents, after checking it and asking first.
+function applyRestoreText(text, sourceLabel){
+  let clean;
+  try{
+    clean = sanitizeBinder(JSON.parse(text));
+  }catch(err){
+    alert('That file doesn\'t look like a valid Study Binder backup. Nothing was changed.');
+    return false;
+  }
+  const hasOwn = data.notes.some(n => n.title !== 'How this binder works');
+  const msg = `Replace your binder (${data.topics.length} topics, ${data.notes.length} notes) with ${sourceLabel} (${clean.topics.length} topics, ${clean.notes.length} notes)?` +
+    (hasOwn ? `\n\nA copy of your current binder will be downloaded first, just in case.` : '');
+  if(!confirm(msg)) return false;
+  if(hasOwn) downloadJson(data, `study-binder-before-restore-${stamp()}.json`);
+  data = clean;
+  freshStart = false;
+  activeTopicId = data.topics.length ? data.topics[0].id : null;
+  relatedPanel = null;
+  saveData();
+  render();
+  setStatus('Backup restored');
+  return true;
+}
+
+$('restoreInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if(!file) return;
+  if(file.size > 20 * 1024 * 1024){ alert('That file is too large to be a Study Binder backup.'); return; }
+  const reader = new FileReader();
+  reader.onload = () => applyRestoreText(reader.result, 'this backup');
+  reader.onerror = () => alert('That file couldn\'t be read. Nothing was changed.');
+  reader.readAsText(file);
+});
+
+// ---- auto-backup to a file on this computer (Chrome / Edge) ----
+// The browser remembers which file was picked (stored in IndexedDB). After a browser restart it
+// asks for permission again, which needs one click from the user.
+const AUTO_LAST_KEY = 'binder-autobackup-last';
+const AUTO_FILE_NAME = 'study-binder-autobackup.json';
+let autoHandle = null;
+let autoState = 'off';          // off | on | reconnect | error | conflict | unsupported
+let autoConflict = null;        // { notes, topics } found in the file when it didn't match this binder
+let autoTimer = null;
+let autoWriting = false;
+let autoWriteAgain = false;
+let autoPanelOpen = false;
+let autoError = '';
+
+function autoSupported(){ return typeof window.showSaveFilePicker === 'function'; }
+
+function idbOpen(){
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('study-binder', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('handles');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbGet(key){
+  try{
+    const db = await idbOpen();
+    return await new Promise((resolve) => {
+      const req = db.transaction('handles').objectStore('handles').get(key);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    });
+  }catch(e){ return null; }
+}
+async function idbSet(key, value){
+  try{
+    const db = await idbOpen();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction('handles', 'readwrite');
+      if(value == null) tx.objectStore('handles').delete(key); else tx.objectStore('handles').put(value, key);
+      tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
+    });
+    return true;
+  }catch(e){ return false; }
+}
+
+async function readAutoFile(){
+  const file = await autoHandle.getFile();
+  const text = await file.text();
+  if(!text.trim()) return null;
+  try{ return { text, binder: sanitizeBinder(JSON.parse(text)) }; }catch(e){ return { text, binder: null }; }
+}
+
+function scheduleAutoBackup(){
+  if(autoState !== 'on') return;
+  clearTimeout(autoTimer);
+  autoTimer = setTimeout(writeAutoBackup, 1500);
+}
+
+async function writeAutoBackup(){
+  clearTimeout(autoTimer); autoTimer = null;
+  if(autoState !== 'on' || !autoHandle) return;
+  if(autoWriting){ autoWriteAgain = true; return; }
+  autoWriting = true;
+  try{
+    const w = await autoHandle.createWritable();
+    await w.write(JSON.stringify(data, null, 1));
+    await w.close();
+    const now = Date.now();
+    lsSet(AUTO_LAST_KEY, now);
+    lsSet(BACKUP_KEY, now);
+  }catch(e){
+    let perm = 'denied';
+    try{ perm = await autoHandle.queryPermission({ mode: 'readwrite' }); }catch(err){}
+    if(perm !== 'granted'){ autoState = 'reconnect'; }
+    else { autoState = 'error'; autoError = e && e.message ? e.message : 'unknown error'; }
+  }
+  autoWriting = false;
+  renderAutoBackupUI();
+  if(autoWriteAgain){ autoWriteAgain = false; scheduleAutoBackup(); }
+}
+
+// After connecting to a file, make sure we never overwrite a backup that holds notes this binder doesn't.
+async function checkFileBeforeWriting(){
+  let found = null;
+  try{ found = await readAutoFile(); }catch(e){ found = null; }
+  // Only stop if the file holds notes we'd lose: ones missing here, or newer than the copy here.
+  const mine = new Map(data.notes.map(n => [n.id, n]));
+  const wouldLose = found && found.binder
+    ? found.binder.notes.filter(n => !mine.has(n.id) || n.updatedAt > mine.get(n.id).updatedAt).length
+    : 0;
+  if(wouldLose > 0){
+    autoConflict = found;
+    autoState = 'conflict';
+  } else {
+    autoState = 'on';
+    writeAutoBackup();
+  }
+  renderAutoBackupUI();
+}
+
+async function chooseAutoFile(){
+  if(!autoSupported()){ autoState = 'unsupported'; renderAutoBackupUI(); return; }
+  let handle;
+  try{
+    handle = await window.showSaveFilePicker({
+      suggestedName: AUTO_FILE_NAME,
+      types: [{ description: 'Study Binder backup', accept: { 'application/json': ['.json'] } }]
+    });
+  }catch(e){ return; } // picker closed
+  autoHandle = handle;
+  await idbSet('autobackup', handle);
+  autoError = '';
+  await checkFileBeforeWriting();
+  setStatus('Auto-backup turned on');
+}
+
+async function reconnectAutoBackup(){
+  if(!autoHandle) return chooseAutoFile();
+  let perm = 'denied';
+  try{ perm = await autoHandle.requestPermission({ mode: 'readwrite' }); }catch(e){}
+  if(perm === 'granted'){ await checkFileBeforeWriting(); }
+  else { setStatus('Permission not given — auto-backup is still paused'); renderAutoBackupUI(); }
+}
+
+async function turnOffAutoBackup(){
+  if(!confirm('Turn off auto-backup? The backup file stays on your computer, but it will stop being updated.')) return;
+  autoHandle = null; autoState = 'off'; autoConflict = null;
+  await idbSet('autobackup', null);
+  renderAutoBackupUI();
+}
+
+async function restoreFromAutoFile(){
+  if(!autoHandle) return;
+  try{
+    if(autoState === 'reconnect'){
+      const perm = await autoHandle.requestPermission({ mode: 'readwrite' });
+      if(perm !== 'granted') return;
+    }
+    const found = autoConflict || await readAutoFile();
+    if(!found){ alert('The auto-backup file is empty.'); return; }
+    const prevState = autoState;
+    autoState = 'off';   // don't write while restoring
+    const ok = applyRestoreText(found.text, 'your auto-backup file');
+    autoState = ok ? 'on' : prevState;
+    if(ok){ autoConflict = null; writeAutoBackup(); }
+    renderAutoBackupUI();
+  }catch(e){
+    alert('The auto-backup file couldn\'t be read. It may have been moved or deleted.');
+  }
+}
+
+function keepThisBinderInFile(){
+  if(!confirm('Overwrite the auto-backup file with the binder that\'s open now? The notes that were in the file will be replaced.')) return;
+  autoConflict = null;
+  autoState = 'on';
+  writeAutoBackup();
+  renderAutoBackupUI();
+}
+
+async function initAutoBackup(){
+  if(!autoSupported()){ autoState = 'unsupported'; renderAutoBackupUI(); return; }
+  const handle = await idbGet('autobackup');
+  if(!handle){ autoState = 'off'; renderAutoBackupUI(); return; }
+  autoHandle = handle;
+  let perm = 'prompt';
+  try{ perm = await handle.queryPermission({ mode: 'readwrite' }); }catch(e){}
+  if(perm === 'granted') await checkFileBeforeWriting();
+  else { autoState = 'reconnect'; renderAutoBackupUI(); }
+}
+
+function timeAgo(ts){
+  if(!ts) return 'not yet';
+  const s = Math.round((Date.now() - ts) / 1000);
+  if(s < 60) return 'just now';
+  if(s < 3600) return `${Math.round(s/60)} min ago`;
+  if(s < 86400) return `${Math.round(s/3600)} hr ago`;
+  return new Date(ts).toLocaleString('en-GB');
+}
+
+function renderAutoBackupUI(){
+  const btn = $('autoBackupBtn');
+  const labels = { off: '💾 Auto-backup: off', on: '💾 Auto-backup: on', reconnect: '💾 Auto-backup: paused', error: '💾 Auto-backup: problem', conflict: '💾 Auto-backup: check', unsupported: '💾 Auto-backup' };
+  btn.textContent = labels[autoState] || labels.off;
+  btn.classList.toggle('auto-on', autoState === 'on');
+  btn.classList.toggle('auto-warn', ['reconnect','error','conflict'].includes(autoState));
+  renderSafetyBanner();
+
+  const host = $('autoBackupPanel');
+  if(!autoPanelOpen){ host.innerHTML = ''; return; }
+  const name = autoHandle ? escapeHtml(autoHandle.name) : '';
+  const last = parseInt(lsGet(AUTO_LAST_KEY)) || 0;
+  let body = '';
+  if(autoState === 'unsupported'){
+    body = `<p>Auto-backup needs <strong>Google Chrome</strong> or <strong>Microsoft Edge</strong> on a computer. In this browser, press ⬇ Backup now and then; the binder reminds you weekly.</p>`;
+  } else if(autoState === 'off'){
+    body = `<p>Save your binder to a file on your computer automatically, every time you change something. If your browser is ever cleared, press ⬆ Restore and pick that file to get everything back.</p>
+      <p class="hint">Tip: save it in your <strong>Documents</strong> folder, or in <strong>OneDrive</strong> so there's a copy in the cloud too.</p>
+      <div class="row"><button class="btn btn-primary" data-auto="choose">Choose where to save</button></div>`;
+  } else if(autoState === 'on'){
+    body = `<p>✓ Every change is saved to <code>${name}</code>. Last saved: <strong>${escapeHtml(timeAgo(last))}</strong>.</p>
+      <div class="row">
+        <button class="btn btn-ghost" data-auto="restore">Restore from this file</button>
+        <button class="btn btn-ghost" data-auto="choose">Use a different file</button>
+        <button class="btn btn-danger" data-auto="off">Turn off</button>
+      </div>`;
+  } else if(autoState === 'reconnect'){
+    body = `<p>Auto-backup to <code>${name}</code> is paused. Browsers ask again for permission after a restart. One click turns it back on.</p>
+      <div class="row"><button class="btn btn-primary" data-auto="reconnect">Turn auto-backup back on</button><button class="btn btn-danger" data-auto="off">Turn off</button></div>`;
+  } else if(autoState === 'error'){
+    body = `<p>Auto-backup couldn't save to <code>${name}</code>. The file may have been moved, renamed or deleted. (${escapeHtml(autoError)})</p>
+      <div class="row"><button class="btn btn-primary" data-auto="choose">Choose the file again</button><button class="btn btn-danger" data-auto="off">Turn off</button></div>`;
+  } else if(autoState === 'conflict'){
+    const n = autoConflict && autoConflict.binder ? autoConflict.binder.notes.length : 0;
+    body = `<p><code>${name}</code> already holds a binder with <strong>${n} note${n===1?'':'s'}</strong> that's different from the one open here. Nothing has been overwritten.</p>
+      <div class="row"><button class="btn btn-primary" data-auto="restore">Load the notes from the file</button><button class="btn btn-ghost" data-auto="keep">Overwrite the file with this binder</button></div>`;
+  }
+  host.innerHTML = `<div class="auto-panel"><div class="deadlines-head"><h3>💾 Auto-backup</h3><button class="related-close" data-auto="close">✕</button></div>${body}</div>`;
+  bindAutoButtons(host);
+}
+
+function bindAutoButtons(root){
+  root.querySelectorAll('[data-auto]').forEach(b => b.addEventListener('click', () => {
+    const act = b.getAttribute('data-auto');
+    if(act === 'close'){ autoPanelOpen = false; renderAutoBackupUI(); }
+    if(act === 'choose') chooseAutoFile();
+    if(act === 'reconnect') reconnectAutoBackup();
+    if(act === 'restore') restoreFromAutoFile();
+    if(act === 'keep') keepThisBinderInFile();
+    if(act === 'off') turnOffAutoBackup();
+    if(act === 'open'){ autoPanelOpen = true; renderAutoBackupUI(); }
+  }));
+}
+
+$('autoBackupBtn').addEventListener('click', () => { autoPanelOpen = !autoPanelOpen; renderAutoBackupUI(); });
+
+// If the page is closed or hidden with a backup still waiting, write it now.
+document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'hidden' && autoTimer) writeAutoBackup(); });
+window.addEventListener('pagehide', () => { if(autoTimer) writeAutoBackup(); });
+
+// ---- flashcards ----
+let flashDeck = [];
+let flashIndex = 0;
+let flashFlipped = false;
+let flashTopicId = null;
+let flashSession = { got: 0, missed: 0, done: false };
+
+function flashTopic(){ return data.topics.find(t => t.id === flashTopicId); }
+function missedCards(topic){ return (topic && topic.flashcards || []).filter(c => c.stats && c.stats.last === 'missed'); }
+
+function updateMissedBtn(){
+  const n = missedCards(flashTopic()).length;
+  const btn = $('flashMissedOnlyBtn');
+  btn.textContent = `Study missed only (${n})`;
+  btn.disabled = n === 0;
+}
+
+function startDeck(cards){
+  flashDeck = cards.slice();
+  flashIndex = 0; flashFlipped = false;
+  flashSession = { got: 0, missed: 0, done: false };
+  renderFlashCard();
+}
+
+function renderFlashCard(){
+  const total = flashDeck.length;
+  updateMissedBtn();
+  $('flashGrade').style.display = (total && flashFlipped && !flashSession.done) ? 'flex' : 'none';
+  if(total === 0 || flashSession.done) return;
+  const score = (flashSession.got || flashSession.missed) ? ` · ✓ ${flashSession.got} · ✗ ${flashSession.missed}` : '';
+  $('flashProgress').textContent = `Card ${flashIndex+1} of ${total}${score}`;
+  const card = flashDeck[flashIndex];
+  const st = card.stats;
+  const record = st ? `<span class="flash-record">Your record: ✓ ${st.right} · ✗ ${st.wrong}</span>` : '';
+  $('flashCardInner').innerHTML = flashFlipped
+    ? `<span class="flash-label">Answer</span>${escapeHtml(card.a || '')}`
+    : `<span class="flash-label">Question</span>${escapeHtml(card.q || '')}${record}`;
+}
+
+function gradeCard(result){
+  if(!flashDeck.length || !flashFlipped || flashSession.done) return;
+  const card = flashDeck[flashIndex];
+  card.stats = card.stats || { right: 0, wrong: 0 };
+  if(result === 'got'){ card.stats.right++; flashSession.got++; }
+  else { card.stats.wrong++; flashSession.missed++; }
+  card.stats.last = result;
+  saveData();
+  if(flashIndex < flashDeck.length - 1){
+    flashIndex++; flashFlipped = false; renderFlashCard();
+  } else {
+    showFlashSummary();
+  }
+}
+
+function showFlashSummary(){
+  flashSession.done = true;
+  const total = flashDeck.length, got = flashSession.got, missed = flashSession.missed;
+  $('flashProgress').textContent = 'Round complete';
+  $('flashGrade').style.display = 'none';
+  updateMissedBtn();
+  const roundMissed = flashDeck.filter(c => c.stats && c.stats.last === 'missed');
+  $('flashCardInner').innerHTML = `<div class="flash-summary">
+    <h4>${got === total ? 'Perfect round!' : 'Round complete'}</h4>
+    <p>You got ${got} of ${total} right${missed ? `, and missed ${missed}` : ''}.</p>
+    ${roundMissed.length ? `<button class="btn btn-primary" id="flashRetryMissed">Review the ${roundMissed.length} you missed</button>` : ''}
+    <button class="btn btn-ghost" id="flashAgain">Go again</button>
+  </div>`;
+  const retry = $('flashRetryMissed');
+  if(retry) retry.addEventListener('click', (e) => { e.stopPropagation(); startDeck(roundMissed); });
+  $('flashAgain').addEventListener('click', (e) => { e.stopPropagation(); startDeck(flashDeck); });
+}
+
+function flipFlash(){
+  if(flashDeck.length === 0 || flashSession.done) return;
+  flashFlipped = !flashFlipped;
+  renderFlashCard();
+}
+function stepFlash(dir){
+  if(flashDeck.length === 0 || flashSession.done) return;
+  flashIndex = (flashIndex + dir + flashDeck.length) % flashDeck.length;
+  flashFlipped = false; renderFlashCard();
+}
+
+$('flashCard').addEventListener('click', flipFlash);
+$('flashPrevBtn').addEventListener('click', () => stepFlash(-1));
+$('flashNextBtn').addEventListener('click', () => stepFlash(1));
+$('flashGotBtn').addEventListener('click', () => gradeCard('got'));
+$('flashMissBtn').addEventListener('click', () => gradeCard('missed'));
+$('flashShuffleBtn').addEventListener('click', () => {
+  const cards = flashDeck.slice();
+  for(let i = cards.length-1; i>0; i--){ const j = Math.floor(Math.random()*(i+1)); [cards[i],cards[j]] = [cards[j],cards[i]]; }
+  startDeck(cards);
+});
+$('flashMissedOnlyBtn').addEventListener('click', () => {
+  const cards = missedCards(flashTopic());
+  if(cards.length) startDeck(cards);
+});
+document.addEventListener('keydown', (e) => {
+  if(!$('flashOverlay').classList.contains('open')) return;
+  if(e.key === 'Escape'){ $('flashCloseBtn').click(); return; }
+  if(e.target.closest && e.target.closest('input, textarea')) return;
+  if(e.key === ' '){ e.preventDefault(); flipFlash(); }
+  else if(e.key === 'ArrowRight') stepFlash(1);
+  else if(e.key === 'ArrowLeft') stepFlash(-1);
+  else if(flashFlipped && (e.key === '1' || e.key.toLowerCase() === 'm')) gradeCard('missed');
+  else if(flashFlipped && (e.key === '2' || e.key.toLowerCase() === 'g')) gradeCard('got');
+});
+$('flashCloseBtn').addEventListener('click', () => { $('flashOverlay').classList.remove('open'); });
+$('flashOverlay').addEventListener('click', (e) => { if(e.target.id === 'flashOverlay') $('flashCloseBtn').click(); });
+$('flashRegenBtn').addEventListener('click', () => {
+  const topic = flashTopic();
+  if(topic) generateFlashcards(topic);
+});
+
+$('flashcardsBtn').addEventListener('click', () => {
+  const topic = currentTopic();
+  if(!topic) return;
+  flashTopicId = topic.id;
+  $('flashTopicTitle').textContent = `Flashcards — ${topic.name}`;
+  $('flashOverlay').classList.add('open');
+  if(topic.flashcards && topic.flashcards.length){
+    startDeck(topic.flashcards);
+  } else {
+    generateFlashcards(topic);
+  }
+});
+
+async function generateFlashcards(topic){
+  $('flashGrade').style.display = 'none';
+  flashSession.done = false;
+  updateMissedBtn();
+  const notes = data.notes.filter(n => n.topicId === topic.id);
+  if(notes.length === 0){
+    flashDeck = [];
+    $('flashCardInner').innerHTML = `<div class="flash-empty">Add some notes to this topic first.</div>`;
+    $('flashProgress').textContent = '';
+    return;
+  }
+  if(!getGeminiKey()){
+    flashDeck = [];
+    $('flashCardInner').innerHTML = `<div class="flash-empty">Add your Google API key (🔑 top left) to generate flashcards.</div>`;
+    $('flashProgress').textContent = '';
+    return;
+  }
+  $('flashCardInner').innerHTML = `<div class="flash-empty">Generating flashcards from your notes...</div>`;
+  $('flashProgress').textContent = '';
+  const combined = notes.map(n => `${n.title}\n${n.content}`).join('\n\n---\n\n').slice(0,6000);
+  try{
+    const prompt = `Based on these study notes, create flashcards for revision — a short question on the front and a concise answer on the back, one per distinct fact or concept, up to 15 cards. Only base flashcards on the substantive academic/study content itself. Ignore and never ask about anything describing the note-taking app's own features, UI, colours, tabs, or buttons — that is not exam content, just app instructions if present. Respond in the same language as the notes. If it is in English, use British English spelling and grammar (for example colour, organise, colonising, centre). Respond ONLY with a JSON array, no markdown fences, no commentary, in this exact shape: [{"q":"...","a":"..."}]\n\nNotes:\n${combined}`;
+    const text = await callGemini(prompt, { json: true });
+    const parsed = JSON.parse(text);
+    topic.flashcards = Array.isArray(parsed) ? parsed : [];
+    saveData();
+    if(flashTopicId === topic.id){
+      startDeck(topic.flashcards);
+      if(flashDeck.length === 0){
+        $('flashCardInner').innerHTML = `<div class="flash-empty">Couldn't generate flashcards from these notes.</div>`;
+      }
+    }
+  }catch(e){
+    if(flashTopicId === topic.id){
+      const msg = e.message === 'NO_KEY' ? 'Add your Google API key (🔑 top left).' : `Something went wrong: ${e.message}`;
+      $('flashCardInner').innerHTML = `<div class="flash-empty">${escapeHtml(msg)}</div>`;
+      $('flashProgress').textContent = '';
+    }
+  }
+}
+
+// ---- print / PDF ----
+function preparePrintArea(topic){
+  const notes = data.notes.filter(n => n.topicId === topic.id);
+  const html = `
+    <h1 style="font-family:'Spectral',serif;">${escapeHtml(topic.name)}</h1>
+    ${notes.map(n => `
+      <div class="print-note">
+        <h2>${escapeHtml(n.title || 'Untitled')}</h2>
+        <div class="print-content md">${renderMarkdown(n.content || '')}</div>
+        ${n.attachments && n.attachments.length ? `<div class="print-attachments"><strong>Attachments:</strong><ul>${n.attachments.map(a => `<li>${escapeHtml(a.label || a.url)} — ${escapeHtml(a.url)}</li>`).join('')}</ul></div>` : ''}
+      </div>
+    `).join('')}
+  `;
+  $('printArea').innerHTML = html;
+}
+
+$('printBtn').addEventListener('click', () => {
+  const topic = currentTopic();
+  if(!topic) return;
+  const notes = data.notes.filter(n => n.topicId === topic.id);
+  if(notes.length === 0){ alert('This topic has no notes to print yet.'); return; }
+  preparePrintArea(topic);
+  window.print();
+});
+
+// ---- note events ----
+$('newNoteBtn').addEventListener('click', () => {
+  if(!activeTopicId) return;
+  const note = { id: uid(), topicId: activeTopicId, title: '', content: '', createdAt: Date.now(), updatedAt: Date.now(), attachments: [], relatedReading: [] };
+  data.notes.push(note);
+  openEditor(note.id);
+});
+
+// another tab saved while this note was open: start from its version so its changes aren't lost
+function mergeExternalChanges(){
+  if(!externalChange) return;
+  const mine = data.notes.find(n => n.id === editingNoteId);
+  try{
+    const fresh = readStoredBinder();
+    if(fresh){
+      data = fresh;
+      const existing = mine && data.notes.find(n => n.id === mine.id);
+      if(existing){ Object.assign(existing, { title: mine.title, content: mine.content, updatedAt: mine.updatedAt }); }
+      else if(mine){
+        if(!data.topics.find(t => t.id === mine.topicId) && data.topics.length) mine.topicId = data.topics[0].id;
+        data.notes.push(mine);
+      }
+    }
+  }catch(err){}
+  externalChange = false;
+}
+
+// ---- autosave while typing (from study-binder_15) ----
+let autoSaveTimer = null;
+function scheduleAutoSave(){
+  if(!editingNoteId) return;
+  const note = data.notes.find(n => n.id === editingNoteId);
+  if(!note) return;
+  note.title = $('editTitle').value;
+  note.content = $('editContent').value;
+  note.updatedAt = Date.now();
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(() => { mergeExternalChanges(); saveData(); }, 800);
+}
+$('editTitle').addEventListener('input', scheduleAutoSave);
+$('editContent').addEventListener('input', scheduleAutoSave);
+
+$('saveNoteBtn').addEventListener('click', () => {
+  clearTimeout(autoSaveTimer);
+  mergeExternalChanges();
+  const note = data.notes.find(n => n.id === editingNoteId);
+  if(note){
+    note.title = $('editTitle').value.trim();
+    note.content = $('editContent').value.trim();
+    note.attachments = pendingAttachments;
+    note.updatedAt = Date.now();
+    const isEmpty = !note.title && !note.content && note.attachments.length===0;
+    if(isEmpty){
+      data.notes = data.notes.filter(n => n.id !== note.id);
+    }
+    saveData();
+    closeEditor(); render();
+    return;
+  }
+  closeEditor(); render();
+});
+
+$('cancelEditBtn').addEventListener('click', () => {
+  // typed text is already autosaved; Cancel just closes (and tidies away an empty new note)
+  const pendingSave = !!autoSaveTimer;
+  clearTimeout(autoSaveTimer); autoSaveTimer = null;
+  const note = data.notes.find(n => n.id === editingNoteId);
+  if(note && !note.title.trim() && !note.content.trim() && (!note.attachments || note.attachments.length===0)){
+    data.notes = data.notes.filter(n => n.id !== note.id);
+    mergeExternalChanges(); saveData();
+  } else if(pendingSave){
+    mergeExternalChanges(); saveData();
+  }
+  closeEditor(); render();
+});
+
+$('deleteNoteBtn').addEventListener('click', () => {
+  if(confirm('Delete this note?')){
+    data.notes = data.notes.filter(n => n.id !== editingNoteId);
+    saveData(); closeEditor(); render();
+  }
+});
+
+$('overlay').addEventListener('click', (e) => {
+  if(e.target.id !== 'overlay') return;
+  $('saveNoteBtn').click();   // notes autosave, so clicking outside keeps your changes
+});
+
+document.addEventListener('keydown', (e) => {
+  if(e.key === 'Escape' && $('overlay').classList.contains('open')){ e.preventDefault(); $('saveNoteBtn').click(); }
+});
+
+$('searchInput').addEventListener('input', (e) => {
+  searchQuery = e.target.value;
+  renderHeader(); renderSearchScope(); renderCards();
+});
+
+// ---- init ----
+(async function init(){
+  await loadData();
+  loadVoice();
+  renderThemeBtn();
+  initAutoBackup();
+  // ask the browser not to clear this site's storage when disk space runs low
+  try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}
+  if(liveTranscript.trim() || currentSummary) setVoiceStatus('Restored your last recording.');
+  render();
+  renderSidebar();
+})();
+</script>
+</body>
+</html>
