@@ -1172,9 +1172,6 @@ function renderTabs(){
     const tab = document.createElement('div');
     tab.className = 'tab' + (topic.id === activeTopicId ? ' active' : '');
     tab.style.background = topicColor(topic, i);
-    const pd = primaryDeadline(topic);
-    const due = pd ? dueLabel(pd.date) : null;
-    const moreDl = topicDeadlines(topic).length - 1;
     tab.innerHTML = `
       <div class="tab-top">
         <span class="tab-name" title="${escapeHtml(topic.name)}">${escapeHtml(topic.name)}</span>
@@ -1183,7 +1180,6 @@ function renderTabs(){
           <button class="tab-del" title="Delete topic" draggable="false" data-topic="${topic.id}">✕</button>
         </span>
       </div>
-      ${due ? `<div class="tab-due ${due.cls}" title="${escapeHtml(deadlineLabel(topic, pd))}: due ${escapeHtml(due.fullDate)}">${pd.title ? escapeHtml(pd.title) + ': ' : ''}${escapeHtml(due.text)}${moreDl > 0 ? ` (+${moreDl})` : ''}</div>` : ''}
     `;
     tab.draggable = true;
     tab.title = 'Drag to reorder';
@@ -1699,7 +1695,7 @@ document.addEventListener('keydown', (e) => {
 
 // ---- always run the latest version of the site ----
 // Bump APP_VERSION here AND in version.json every time the site is published.
-const APP_VERSION = '2026-09-28.4';
+const APP_VERSION = '2026-09-28.5';
 function busyForUpdate(){
   return $('overlay').classList.contains('open') || isListening || isSummarizing || autoWriting;
 }
