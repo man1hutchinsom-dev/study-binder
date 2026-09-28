@@ -466,7 +466,8 @@ try{ var th = appStore.getItem('binder-theme'); if(th) document.documentElement.
   .cal-num{ font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink); width:24px; height:24px; display:flex; align-items:center; justify-content:center; border-radius:50%; }
   .cal-day.today .cal-num{ background:var(--ink); color:var(--paper); font-weight:600; }
   .cal-chip{ display:block; width:100%; border:none; border-radius:5px; padding:3px 6px; color:#fff; font-family:'Inter',sans-serif; font-size:11.5px; font-weight:600;
-    text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,.15); }
+    text-align:left; overflow:hidden; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,.15);
+    line-height:1.25; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; word-break:break-word; margin-bottom:2px; }
   .cal-chip:hover{ filter:brightness(1.1); }
   .cal-chip.overdue::before{ content:"⚠ "; }
   .cal-day.has-deadline{ box-shadow:inset 0 3px 0 var(--deadline-colour); }
@@ -474,6 +475,13 @@ try{ var th = appStore.getItem('binder-theme'); if(th) document.documentElement.
   .cal-panel strong{ font-family:'Spectral',serif; font-size:16px; }
   .cal-panel select{ font-family:'Inter',sans-serif; font-size:13px; padding:6px 8px; border:1px solid var(--paper-edge); border-radius:6px; background:var(--surface); color:var(--ink); }
   .cal-panel .existing{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; width:100%; }
+  .cal-panel input[type=text]{ font-family:'Inter',sans-serif; font-size:13px; padding:6px 8px; border:1px solid var(--paper-edge); border-radius:6px; background:var(--surface); color:var(--ink); min-width:200px; flex:1; }
+  .cal-panel .dl-line{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; width:100%; }
+  .dl-edit-row{ display:flex; gap:6px; align-items:center; margin-bottom:6px; }
+  .topic-edit-form .dl-edit-row input{ margin-bottom:0; }
+  .topic-edit-form .dl-edit-row input[type=date]{ width:auto; flex:0 0 auto; }
+  .dl-edit-row .dl-del{ border:none; background:none; color:var(--ink-soft); cursor:pointer; font-size:15px; padding:4px 6px; }
+  .dl-edit-row .dl-del:hover{ color:var(--danger); }
   .cal-legend{ margin-top:18px; display:flex; flex-wrap:wrap; gap:8px 18px; }
   .cal-legend-item{ display:flex; align-items:center; gap:7px; font-size:13px; cursor:pointer; }
   .cal-legend-item .topic-swatch{ width:14px; height:14px; }
@@ -483,7 +491,7 @@ try{ var th = appStore.getItem('binder-theme'); if(th) document.documentElement.
   @media (max-width:700px){
     .cal-inner{ padding:10px 8px 40px 8px; }
     .cal-day{ min-height:64px; padding:3px; }
-    .cal-chip{ font-size:0; padding:0; height:8px; border-radius:4px; }
+    .cal-chip{ font-size:0; padding:0; height:8px; border-radius:4px; display:block; }
     .cal-chip.overdue::before{ content:""; }
     .cal-title{ font-size:18px; min-width:0; }
     .cal-dow{ font-size:9px; padding:6px 2px; }
@@ -747,6 +755,29 @@ let pendingAttachments = [];
 const $ = (id) => document.getElementById(id);
 function uid(){ return Math.random().toString(36).slice(2,10); }
 
+// ---- named deadlines ----
+// Each topic keeps a list of deadlines: [{ id, title, date:'YYYY-MM-DD' }].
+// topic.dueDate is kept as the "main" one (next upcoming, else the latest past) so older versions still show a date.
+function topicDeadlines(t){ return (t && Array.isArray(t.deadlines)) ? t.deadlines : []; }
+function primaryDeadline(t){
+  const list = topicDeadlines(t).slice().sort((a, b) => a.date.localeCompare(b.date));
+  if(!list.length) return null;
+  const today = isoDate(new Date());
+  return list.find(d => d.date >= today) || list[list.length - 1];
+}
+function syncDueDate(t){
+  if(!t) return;
+  if(!Array.isArray(t.deadlines)) t.deadlines = [];
+  const p = primaryDeadline(t);
+  t.dueDate = p ? p.date : null;
+}
+function deadlineLabel(t, d){ return d && d.title ? `${t.name} – ${d.title}` : t.name; }
+function allDeadlines(){
+  const out = [];
+  data.topics.forEach((t, i) => topicDeadlines(t).forEach(d => out.push({ t, d, colour: topicColor(t, i) })));
+  return out.sort((a, b) => a.d.date.localeCompare(b.d.date) || deadlineLabel(a.t, a.d).localeCompare(deadlineLabel(b.t, b.d)));
+}
+
 function setStatus(text){
   const el = $('status');
   el.textContent = text;
@@ -787,7 +818,14 @@ function sanitizeBinder(obj){
       id,
       name: str(t.name, 60).trim() || 'Untitled',
       color: /^#[0-9a-f]{6}$/i.test(t.color) ? t.color : PALETTE[topics.length % PALETTE.length],
-      dueDate: /^\d{4}-\d{2}-\d{2}$/.test(t.dueDate) ? t.dueDate : null,
+      dueDate: null,
+      deadlines: (() => {
+        const isDate = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+        let list = (Array.isArray(t.deadlines) ? t.deadlines : []).filter(d => d && typeof d === 'object' && isDate(d.date))
+          .slice(0, 200).map(d => ({ id: str(d.id, 40) || uid(), title: str(d.title, 120).trim(), date: d.date }));
+        if(!Array.isArray(t.deadlines) && isDate(t.dueDate)) list = [{ id: uid(), title: '', date: t.dueDate }];
+        return list;
+      })(),
       flashcards: (Array.isArray(t.flashcards) ? t.flashcards : []).filter(c => c && typeof c === 'object').map(c => {
         const card = { q: str(c.q, 2000), a: str(c.a, 4000) };
         if(c.stats && typeof c.stats === 'object'){
@@ -797,6 +835,7 @@ function sanitizeBinder(obj){
         return card;
       })
     });
+    syncDueDate(topics[topics.length - 1]);
   });
   let recoveredId = null;
   const noteIds = new Set();
@@ -806,7 +845,7 @@ function sanitizeBinder(obj){
     let topicId = str(n.topicId, 40);
     if(!seen.has(topicId)){
       // keep notes whose topic is missing rather than silently dropping them
-      if(!recoveredId){ recoveredId = uid(); seen.add(recoveredId); topics.push({ id: recoveredId, name: 'Recovered notes', color: '#4f5b66', dueDate: null, flashcards: [] }); }
+      if(!recoveredId){ recoveredId = uid(); seen.add(recoveredId); topics.push({ id: recoveredId, name: 'Recovered notes', color: '#4f5b66', dueDate: null, deadlines: [], flashcards: [] }); }
       topicId = recoveredId;
     }
     let id = str(n.id, 40) || uid();
@@ -832,7 +871,7 @@ function sanitizeBinder(obj){
 function isSafeUrl(u){ return typeof u === 'string' && /^https?:\/\//i.test(u.trim()); }
 
 function starterBinder(){
-  const t1 = { id: uid(), name: 'Getting started', color: COLORS[0], dueDate: null, flashcards: [] };
+  const t1 = { id: uid(), name: 'Getting started', color: COLORS[0], dueDate: null, deadlines: [], flashcards: [] };
   return { topics: [t1], notes: [{
     id: uid(), topicId: t1.id, title: 'How this binder works',
     content: 'Each coloured tab is a topic. Click the pencil next to a topic\'s name to rename it, pick a colour or set a due date. Add attachments (image or file links) from inside a note. Use search to find a word anywhere — toggle between searching just this topic or everything. The Voice notes panel on the right can record and transcribe, then summarise it at your chosen depth. Try the flashcards (🗂) and print (🖨) buttons up top, and back up your binder any time from the top left.',
@@ -872,6 +911,7 @@ async function saveData(){
     return false;
   }
   try{
+    data.topics.forEach(syncDueDate);
     const json = JSON.stringify(data);
     appStore.setItem(STORE_KEY, json);
     storageUsed = json.length;
@@ -1132,7 +1172,9 @@ function renderTabs(){
     const tab = document.createElement('div');
     tab.className = 'tab' + (topic.id === activeTopicId ? ' active' : '');
     tab.style.background = topicColor(topic, i);
-    const due = dueLabel(topic.dueDate);
+    const pd = primaryDeadline(topic);
+    const due = pd ? dueLabel(pd.date) : null;
+    const moreDl = topicDeadlines(topic).length - 1;
     tab.innerHTML = `
       <div class="tab-top">
         <span class="tab-name" title="${escapeHtml(topic.name)}">${escapeHtml(topic.name)}</span>
@@ -1141,7 +1183,7 @@ function renderTabs(){
           <button class="tab-del" title="Delete topic" draggable="false" data-topic="${topic.id}">✕</button>
         </span>
       </div>
-      ${due ? `<div class="tab-due ${due.cls}" title="Due ${escapeHtml(due.fullDate)}">${escapeHtml(due.text)}</div>` : ''}
+      ${due ? `<div class="tab-due ${due.cls}" title="${escapeHtml(deadlineLabel(topic, pd))}: due ${escapeHtml(due.fullDate)}">${pd.title ? escapeHtml(pd.title) + ': ' : ''}${escapeHtml(due.text)}${moreDl > 0 ? ` (+${moreDl})` : ''}</div>` : ''}
     `;
     tab.draggable = true;
     tab.title = 'Drag to reorder';
@@ -1234,7 +1276,7 @@ function showAddTopicForm(tabsEl, addBtn){
     done = true;
     const name = input.value.trim();
     if(name){
-      data.topics.push({ id: uid(), name, color: nextFreeColor(), dueDate: null, flashcards: [] });
+      data.topics.push({ id: uid(), name, color: nextFreeColor(), dueDate: null, deadlines: [], flashcards: [] });
       activeTopicId = data.topics[data.topics.length-1].id;
       saveData();
     }
@@ -1264,9 +1306,11 @@ function renderHeader(){
   } else if(topic){
     const idx = data.topics.indexOf(topic);
     title.innerHTML = `<span class="topic-swatch" style="background:${topicColor(topic, idx)}"></span>${escapeHtml(topic.name)}`;
-    const due = dueLabel(topic.dueDate);
-    meta.textContent = due ? due.text : '';
-    meta.title = due ? `Due ${due.fullDate}` : '';
+    const pd = primaryDeadline(topic);
+    const due = pd ? dueLabel(pd.date) : null;
+    const moreDl = topicDeadlines(topic).length - 1;
+    meta.textContent = due ? `${pd.title ? pd.title + ': ' : ''}${due.text}${moreDl > 0 ? ` (+${moreDl} more)` : ''}` : '';
+    meta.title = due ? `${pd.title || 'Due'}: ${due.fullDate}` : '';
     meta.className = 'topic-meta' + (due ? ' ' + due.cls : '');
     editBtn.style.display = 'inline-block';
     flashBtn.style.display = 'inline-block';
@@ -1462,23 +1506,22 @@ let deadlinesOpen = false;
 function renderDeadlines(){
   const host = $('deadlinesHost');
   if(!deadlinesOpen){ host.innerHTML = ''; return; }
-  const dated = data.topics.filter(t => t.dueDate).sort((a,b) => a.dueDate.localeCompare(b.dueDate));
-  const undated = data.topics.length - dated.length;
-  const rows = dated.map(t => {
-    const due = dueLabel(t.dueDate);
-    const idx = data.topics.indexOf(t);
+  const dated = allDeadlines();
+  const undated = data.topics.filter(t => !topicDeadlines(t).length).length;
+  const rows = dated.map(({ t, d, colour }) => {
+    const due = dueLabel(d.date);
     const count = data.notes.filter(n => n.topicId === t.id).length;
     return `<div class="deadline-row" data-topic="${t.id}">
-      <span class="topic-swatch" style="background:${topicColor(t, idx)}"></span>
-      <span class="deadline-name">${escapeHtml(t.name)} <span class="deadline-date">· ${count} note${count===1?'':'s'}</span></span>
+      <span class="topic-swatch" style="background:${colour}"></span>
+      <span class="deadline-name">${escapeHtml(deadlineLabel(t, d))} <span class="deadline-date">· ${count} note${count===1?'':'s'}</span></span>
       <span class="deadline-date">${escapeHtml(due.fullDate)}</span>
       <span class="deadline-left ${due.cls}">${escapeHtml(due.text)}</span>
     </div>`;
   }).join('');
   host.innerHTML = `<div class="deadlines-panel">
     <div class="deadlines-head"><h3>📅 Upcoming deadlines</h3><span><button class="btn btn-ghost" id="deadlinesCalBtn">🗓 Open calendar</button><button class="related-close" id="deadlinesClose">✕</button></span></div>
-    ${dated.length ? rows : '<div class="deadlines-empty">No due dates yet. Press ✎ next to a topic name to add one.</div>'}
-    ${dated.length && undated ? `<div class="deadlines-empty" style="margin-top:8px;">${undated} topic${undated===1?' has':'s have'} no due date.</div>` : ''}
+    ${dated.length ? rows : '<div class="deadlines-empty">No deadlines yet. Press ✎ next to a topic name, or open the calendar and click a day, to add one.</div>'}
+    ${dated.length && undated ? `<div class="deadlines-empty" style="margin-top:8px;">${undated} topic${undated===1?' has':'s have'} no deadline.</div>` : ''}
   </div>`;
   $('deadlinesClose').addEventListener('click', () => { deadlinesOpen = false; renderDeadlines(); });
   $('deadlinesCalBtn').addEventListener('click', openCalendar);
@@ -1514,7 +1557,7 @@ function renderCalendar(){
   $('calTitle').textContent = calMonth.toLocaleDateString('en-GB', { month:'long', year:'numeric' });
   const todayIso = isoDate(new Date());
   const byDate = {};
-  data.topics.forEach((t, i) => { if(t.dueDate){ (byDate[t.dueDate] = byDate[t.dueDate] || []).push({ t, colour: topicColor(t, i) }); } });
+  allDeadlines().forEach(item => { (byDate[item.d.date] = byDate[item.d.date] || []).push(item); });
 
   const first = new Date(y, m, 1);
   const start = new Date(y, m, 1 - ((first.getDay() + 6) % 7));   // weeks start on Monday
@@ -1532,10 +1575,11 @@ function renderCalendar(){
     if(d.getDay() === 0 || d.getDay() === 6) cls.push('weekend');
     if(iso === calSelected) cls.push('selected');
     if(items.length) cls.push('has-deadline');
-    const chips = items.map(({ t, colour }) => {
-      const due = dueLabel(t.dueDate);
+    const chips = items.map(({ t, d, colour }) => {
+      const due = dueLabel(d.date);
+      const label = deadlineLabel(t, d);
       return `<button class="cal-chip ${due.cls === 'overdue' ? 'overdue' : ''}" data-topic="${t.id}" style="background:${colour}"
-        title="${escapeHtml(t.name)}: due ${escapeHtml(due.fullDate)} (${escapeHtml(due.text)})">${escapeHtml(t.name)}</button>`;
+        title="${escapeHtml(label)}: due ${escapeHtml(due.fullDate)} (${escapeHtml(due.text)})">${escapeHtml(label)}</button>`;
     }).join('');
     html += `<div class="${cls.join(' ')}" data-date="${iso}" ${items.length ? `style="--deadline-colour:${items[0].colour}"` : ''}>
       <span class="cal-num">${d.getDate()}</span>${chips}</div>`;
@@ -1566,40 +1610,64 @@ function renderCalDayPanel(){
   if(!calSelected){ host.innerHTML = ''; return; }
   const [yy, mm, dd] = calSelected.split('-').map(Number);
   const nice = new Date(yy, mm - 1, dd).toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
-  const onDay = data.topics.filter(t => t.dueDate === calSelected);
-  const others = data.topics.filter(t => t.dueDate !== calSelected);
+  const onDay = allDeadlines().filter(x => x.d.date === calSelected);
+  const activeOpt = data.topics.some(t => t.id === activeTopicId) ? activeTopicId : '';
   host.innerHTML = `<div class="cal-panel">
     <strong>${escapeHtml(nice)}</strong>
-    ${others.length ? `<span>Set as the deadline for</span>
-      <select id="calTopicSelect">${others.map(t => `<option value="${t.id}">${escapeHtml(t.name)}${t.dueDate ? ` (now ${escapeHtml(formatUKDate(t.dueDate))})` : ''}</option>`).join('')}</select>
-      <button class="btn btn-primary" id="calSetBtn">Set deadline</button>` : '<span>Every topic is due on this day.</span>'}
-    ${onDay.length ? `<div class="existing"><span>Due this day:</span>${onDay.map(t => {
-      const i = data.topics.indexOf(t);
-      return `<span class="cal-legend-item"><span class="topic-swatch" style="background:${topicColor(t, i)}"></span>${escapeHtml(t.name)}</span>
-        <button class="btn btn-danger" data-remove="${t.id}">Remove deadline</button>`; }).join('')}</div>` : ''}
+    ${data.topics.length ? `<div class="dl-line"><span>Add a deadline for</span>
+      <select id="calTopicSelect">${data.topics.map(t => `<option value="${t.id}" ${t.id === activeOpt ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}</select>
+      <input type="text" id="calDlName" maxlength="120" placeholder="Name, e.g. Critical analysis paper">
+      <button class="btn btn-primary" id="calSetBtn">Add deadline</button></div>` : '<span>Add a topic first.</span>'}
+    ${onDay.length ? `<div class="existing"><span>Due this day:</span></div>${onDay.map(({ t, d, colour }) =>
+      `<div class="dl-line"><span class="cal-legend-item"><span class="topic-swatch" style="background:${colour}"></span>${escapeHtml(deadlineLabel(t, d))}</span>
+        <button class="btn btn-ghost" data-rename="${t.id}|${d.id}">Rename</button>
+        <button class="btn btn-danger" data-remove="${t.id}|${d.id}">Remove</button></div>`).join('')}` : ''}
   </div>`;
+  const findDl = (key) => {
+    const [tid, did] = key.split('|');
+    const t = data.topics.find(x => x.id === tid);
+    const d = t && topicDeadlines(t).find(x => x.id === did);
+    return d ? { t, d } : null;
+  };
   const setBtn = $('calSetBtn');
-  if(setBtn) setBtn.addEventListener('click', () => {
+  const addDl = () => {
     const t = data.topics.find(x => x.id === $('calTopicSelect').value);
     if(!t) return;
-    t.dueDate = calSelected;
+    const title = $('calDlName').value.trim().slice(0, 120);
+    if(!Array.isArray(t.deadlines)) t.deadlines = [];
+    const d = { id: uid(), title, date: calSelected };
+    t.deadlines.push(d);
     saveData(); render(); renderCalendar();
-    setStatus(`Deadline set for ${t.name}`);
-  });
+    setStatus(`Deadline added: ${deadlineLabel(t, d)}`);
+  };
+  if(setBtn){
+    setBtn.addEventListener('click', addDl);
+    $('calDlName').addEventListener('keydown', (e) => { if(e.key === 'Enter'){ e.preventDefault(); addDl(); } });
+  }
+  host.querySelectorAll('[data-rename]').forEach(b => b.addEventListener('click', () => {
+    const f = findDl(b.getAttribute('data-rename'));
+    if(!f) return;
+    const next = prompt(`Name for this ${f.t.name} deadline (leave blank to just show the topic name):`, f.d.title);
+    if(next === null) return;
+    f.d.title = next.trim().slice(0, 120);
+    saveData(); render(); renderCalendar();
+  }));
   host.querySelectorAll('[data-remove]').forEach(b => b.addEventListener('click', () => {
-    const t = data.topics.find(x => x.id === b.getAttribute('data-remove'));
-    if(!t) return;
-    t.dueDate = null;
+    const f = findDl(b.getAttribute('data-remove'));
+    if(!f) return;
+    f.t.deadlines = topicDeadlines(f.t).filter(x => x !== f.d);
     saveData(); render(); renderCalendar();
   }));
 }
 
 function renderCalLegend(){
-  const topics = data.topics.slice().sort((a, b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999'));
+  const mainDate = t => { const p = primaryDeadline(t); return p ? p.date : '9999'; };
+  const topics = data.topics.slice().sort((a, b) => mainDate(a).localeCompare(mainDate(b)));
   $('calLegend').innerHTML = topics.map(t => {
     const i = data.topics.indexOf(t);
-    const due = dueLabel(t.dueDate);
-    return `<span class="cal-legend-item" data-topic="${t.id}" data-due="${t.dueDate || ''}">
+    const pd = primaryDeadline(t);
+    const due = pd ? dueLabel(pd.date) : null;
+    return `<span class="cal-legend-item" data-topic="${t.id}" data-due="${pd ? pd.date : ''}">
       <span class="topic-swatch" style="background:${topicColor(t, i)}"></span>${escapeHtml(t.name)}
       <span class="when ${due ? due.cls : ''}">${due ? `${escapeHtml(due.fullDate)} · ${escapeHtml(due.text)}` : 'no deadline'}</span></span>`;
   }).join('');
@@ -1631,7 +1699,7 @@ document.addEventListener('keydown', (e) => {
 
 // ---- always run the latest version of the site ----
 // Bump APP_VERSION here AND in version.json every time the site is published.
-const APP_VERSION = '2026-09-28.3';
+const APP_VERSION = '2026-09-28.4';
 function busyForUpdate(){
   return $('overlay').classList.contains('open') || isListening || isSummarizing || autoWriting;
 }
@@ -1682,6 +1750,13 @@ $('themeBtn').addEventListener('click', () => {
 });
 
 // ---- topic edit ----
+function dlEditRow(d){
+  return `<div class="dl-edit-row" data-id="${escapeHtml(d.id || '')}">
+    <input type="text" maxlength="120" placeholder="Name, e.g. Critical analysis paper" value="${escapeHtml(d.title || '')}">
+    <input type="date" value="${escapeHtml(d.date || '')}">
+    <button class="dl-del" type="button" title="Remove this deadline">✕</button>
+  </div>`;
+}
 $('editTopicBtn').addEventListener('click', () => {
   const topic = currentTopic();
   if(!topic) return;
@@ -1690,8 +1765,9 @@ $('editTopicBtn').addEventListener('click', () => {
     <div class="topic-edit-form">
       <label>Topic name</label>
       <input type="text" id="topicNameInput" value="${escapeHtml(topic.name)}" maxlength="30">
-      <label>Due date (optional)</label>
-      <input type="date" id="topicDueInput" value="${topic.dueDate || ''}">
+      <label>Deadlines (optional)</label>
+      <div id="topicDlList">${topicDeadlines(topic).slice().sort((a, b) => a.date.localeCompare(b.date)).map(d => dlEditRow(d)).join('')}</div>
+      <button class="btn btn-ghost" id="topicDlAdd" style="margin-bottom:12px;">+ Add deadline</button>
       <label>Colour</label>
       <div class="swatches" id="topicSwatches">
         ${PALETTE.map(c => `<button class="swatch ${c===topicColor(topic, data.topics.indexOf(topic))?'selected':''}" data-color="${c}" style="background:${c}" title="${c}"></button>`).join('')}
@@ -1709,6 +1785,12 @@ $('editTopicBtn').addEventListener('click', () => {
     </div>
   `;
   $('topicEditCancel').addEventListener('click', () => { container.innerHTML=''; });
+  const dlList = $('topicDlList');
+  dlList.addEventListener('click', (e) => { const b = e.target.closest('.dl-del'); if(b) b.parentElement.remove(); });
+  $('topicDlAdd').addEventListener('click', () => {
+    dlList.insertAdjacentHTML('beforeend', dlEditRow({ id: '', title: '', date: '' }));
+    dlList.lastElementChild.querySelector('input[type=text]').focus();
+  });
   let chosenColor = topicColor(topic, data.topics.indexOf(topic));
   container.querySelectorAll('.swatch').forEach(sw => {
     sw.addEventListener('click', () => {
@@ -1729,7 +1811,11 @@ $('editTopicBtn').addEventListener('click', () => {
     topic.color = chosenColor;
     const name = $('topicNameInput').value.trim();
     if(name) topic.name = name;
-    topic.dueDate = $('topicDueInput').value || null;
+    topic.deadlines = [...dlList.querySelectorAll('.dl-edit-row')].map(row => ({
+      id: row.getAttribute('data-id') || uid(),
+      title: row.querySelector('input[type=text]').value.trim().slice(0, 120),
+      date: row.querySelector('input[type=date]').value
+    })).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d.date));
     saveData();
     container.innerHTML = '';
     render();
