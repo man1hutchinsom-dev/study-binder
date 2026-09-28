@@ -1695,7 +1695,7 @@ document.addEventListener('keydown', (e) => {
 
 // ---- always run the latest version of the site ----
 // Bump APP_VERSION here AND in version.json every time the site is published.
-const APP_VERSION = '2026-09-28.5';
+const APP_VERSION = '2026-09-28.6';
 function busyForUpdate(){
   return $('overlay').classList.contains('open') || isListening || isSummarizing || autoWriting;
 }
@@ -2060,19 +2060,30 @@ function renderRelatedInline(note){
   const host = $('relatedInline');
   if(!note){ host.innerHTML = ''; return; }
   const items = note.relatedReading || [];
+  // show what happened inside the note too (the panel on the main page is hidden behind the full-screen note)
+  const st = relatedPanel && relatedPanel.noteId === note.id ? relatedPanel : null;
+  let msg = '';
+  if(st && st.status === 'loading') msg = 'Searching for related reading… this can take a few seconds.';
+  else if(st && st.status === 'nokey') msg = '⚠ Add your Google API key first: close the note and press 🔑 at the top left.';
+  else if(st && st.status === 'error') msg = `⚠ Couldn't get related reading. ${st.error ? 'Google said: ' + st.error : 'Please try again in a minute.'}`;
+  else if(st && st.status === 'done' && !items.length) msg = 'No related reading found for this note. Try adding a bit more to it first.';
+  const msgHtml = msg ? `<div class="related-loading" id="relatedInlineMsg" style="margin-bottom:8px;">${escapeHtml(msg)}</div>` : '';
+  const busy = st && st.status === 'loading';
+  const btnHtml = `<button class="btn btn-ghost" id="findRelatedBtn" ${busy ? 'disabled' : ''}>${busy ? 'Searching…' : (items.length ? 'Refresh' : 'Find related reading')}</button>`;
   if(items.length === 0){
-    host.innerHTML = `<div class="related-inline"><h4>Related reading</h4><button class="btn btn-ghost" id="findRelatedBtn">Find related reading</button></div>`;
+    host.innerHTML = `<div class="related-inline"><h4>Related reading</h4>${msgHtml}${btnHtml}</div>`;
   } else {
-    host.innerHTML = `<div class="related-inline"><h4>Related reading</h4>
+    host.innerHTML = `<div class="related-inline"><h4>Related reading</h4>${msgHtml}
       <div class="related-list">${items.map(renderRelatedItem).join('')}</div>
-      <div class="related-btn-row"><button class="btn btn-ghost" id="findRelatedBtn">Refresh</button></div>
+      <div class="related-btn-row">${btnHtml}</div>
     </div>`;
   }
   const btn = $('findRelatedBtn');
   if(btn){
     btn.addEventListener('click', async () => {
-      btn.disabled = true; btn.textContent = 'Searching…';
-      await fetchRelatedReading(note);
+      const p = fetchRelatedReading(note);
+      if(editingNoteId === note.id) renderRelatedInline(note);
+      await p;
       if(editingNoteId === note.id) renderRelatedInline(note);
     });
   }
@@ -2081,7 +2092,17 @@ function renderRelatedInline(note){
 async function findRelatedReading(title, content){
   const prompt = `A student wrote study notes titled "${title}". Notes:\n\n${(content || '').slice(0,3000)}\n\nSuggest 4-6 good search queries someone could use to find real articles or web pages about this topic — a mix of ones that would explain or support it in more depth ("supports"), ones that would surface a genuinely relevant contrasting or critical viewpoint ("challenges"), and ones that would give broader background ("background"). For each, give a short punchy label (not the raw query), a good search query, and a one-sentence note on what to look for. Respond in the same language as the notes. If it is in English, use British English spelling and grammar (for example colour, organise, colonising, centre). Respond ONLY with a JSON array, no markdown fences, no commentary, in this exact shape: [{"label":"...","query":"...","stance":"supports","note":"one short sentence"}]`;
   const text = await callGemini(prompt, { json: true });
-  return JSON.parse(text);
+  let list;
+  try{
+    list = JSON.parse(text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim());
+  }catch(e){
+    const m = text.match(/\[[\s\S]*\]/);   // the answer sometimes has extra words around the list
+    if(!m) throw new Error('The answer came back in the wrong format. Please try again.');
+    list = JSON.parse(m[0]);
+  }
+  if(!Array.isArray(list) && list && Array.isArray(list.items)) list = list.items;
+  return (Array.isArray(list) ? list : []).filter(r => r && typeof r === 'object' && (r.query || r.label))
+    .map(r => ({ label: String(r.label || r.query).slice(0, 200), query: String(r.query || r.label).slice(0, 300), stance: String(r.stance || 'background').slice(0, 20), note: String(r.note || '').slice(0, 500) }));
 }
 
 async function fetchRelatedReading(note){
@@ -2105,6 +2126,7 @@ async function fetchRelatedReading(note){
   }catch(e){
     if(relatedPanel && relatedPanel.noteId === note.id){
       relatedPanel.status = 'error';
+      relatedPanel.error = e && e.message === 'Failed to fetch' ? 'no connection to Google. Check your internet.' : String((e && e.message) || '').slice(0, 300);
       renderRelatedHost();
     }
   }
