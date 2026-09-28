@@ -6,7 +6,79 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<script>try{ var th = localStorage.getItem('binder-theme'); if(th) document.documentElement.setAttribute('data-theme', th); }catch(e){}</script>
+<script>
+// Where the binder is saved. On the website: this browser's storage. In the desktop app
+// (window.__SB_DESKTOP__ is added by the app): files in Documents\Study Binder, via the app.
+(function(){
+  var D = window.__SB_DESKTOP__;
+  if(!D){ try{ window.appStore = window.localStorage; }catch(e){ window.appStore = null; } window.SB_DESKTOP = null; return; }
+  var mem = {}, k;
+  for(k in D.store) if(Object.prototype.hasOwnProperty.call(D.store, k)) mem[k] = D.store[k];
+  var client = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  var rev = D.rev || 0;
+  // Saves wait for the app to confirm the file was written, so a failed save shows the red warning.
+  function post(path, payload){
+    var x = new XMLHttpRequest();
+    x.open('POST', path, false);
+    x.setRequestHeader('Content-Type', 'application/json');
+    x.setRequestHeader('X-SB-Token', D.token);
+    x.send(JSON.stringify(payload));
+    var r = null;
+    try{ r = JSON.parse(x.responseText); }catch(e){}
+    if(x.status !== 200 || !r || !r.ok) throw new Error((r && r.error) || 'Study Binder app not responding');
+    if(r.rev > rev && r.rev === rev + 1) rev = r.rev;
+    return r;
+  }
+  window.appStore = {
+    getItem: function(key){ return Object.prototype.hasOwnProperty.call(mem, key) ? mem[key] : null; },
+    setItem: function(key, value){
+      value = String(value);
+      if(mem[key] === value) return;
+      post('/api/set', { key: key, value: value, client: client });
+      mem[key] = value;
+    },
+    removeItem: function(key){
+      if(!Object.prototype.hasOwnProperty.call(mem, key)) return;
+      post('/api/remove', { key: key, client: client });
+      delete mem[key];
+    }
+  };
+  async function api(path, payload){
+    const res = await fetch(path, payload === undefined
+      ? { headers: { 'X-SB-Token': D.token }, cache: 'no-store' }
+      : { method: 'POST', headers: { 'X-SB-Token': D.token, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const r = await res.json();
+    if(!res.ok || !r.ok) throw new Error(r.error || 'Study Binder app not responding');
+    return r;
+  }
+  window.SB_DESKTOP = {
+    info: D.info, notice: D.notice, api: api,
+    // Last-moment save while the window is closing (normal saves aren't allowed then).
+    beacon: function(key, value){
+      value = String(value);
+      if(mem[key] === value) return;
+      mem[key] = value;
+      navigator.sendBeacon('/api/set?token=' + encodeURIComponent(D.token),
+        new Blob([JSON.stringify({ key: key, value: value, client: client })], { type: 'text/plain' }));
+    }
+  };
+  // Keeps two open windows in step, and tells the app the window is still open.
+  async function poll(){
+    try{
+      const r = await api('/api/poll?since=' + rev + '&client=' + client);
+      rev = r.rev;
+      Object.keys(r.changed).forEach(function(key){
+        const v = r.changed[key];
+        if(mem[key] === v || (v === null && !(key in mem))) return;
+        if(v === null) delete mem[key]; else mem[key] = v;
+        window.dispatchEvent(new StorageEvent('storage', { key: key, newValue: v }));
+      });
+    }catch(e){}
+  }
+  setInterval(poll, 3000);
+})();
+try{ var th = appStore.getItem('binder-theme'); if(th) document.documentElement.setAttribute('data-theme', th); }catch(e){}
+</script>
 <title>Study Binder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,500;0,600;0,700;1,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -688,8 +760,8 @@ const SNOOZE_KEY = 'binder-backup-snooze';
 const CORRUPT_KEY = 'binder-data-damaged-copy';
 const STORAGE_SOFT_LIMIT = 4000000; // characters; browsers allow roughly 5 million
 const BACKUP_EVERY_DAYS = 7;
-function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
-function lsSet(k, v){ try{ localStorage.setItem(k, String(v)); return true; }catch(e){ return false; } }
+function lsGet(k){ try{ return appStore.getItem(k); }catch(e){ return null; } }
+function lsSet(k, v){ try{ appStore.setItem(k, String(v)); return true; }catch(e){ return false; } }
 
 let saveFailed = false;
 let savesPaused = false;      // true while a damaged saved binder has not been rescued yet
@@ -801,7 +873,7 @@ async function saveData(){
   }
   try{
     const json = JSON.stringify(data);
-    localStorage.setItem(STORE_KEY, json);
+    appStore.setItem(STORE_KEY, json);
     storageUsed = json.length;
     lsSet(CHANGED_KEY, Date.now());
     saveFailed = false;
@@ -812,7 +884,7 @@ async function saveData(){
   }catch(e){
     saveFailed = true;
     renderSafetyBanner();
-    setStatus('⚠ Save failed — storage may be full or blocked');
+    setStatus(SB_DESKTOP ? '⚠ Save failed — Study Binder couldn\'t write to its folder' : '⚠ Save failed — storage may be full or blocked');
     return false;
   }
 }
@@ -849,10 +921,18 @@ function renderSafetyBanner(){
     cls = 'danger';
     msg = '<strong>Your saved binder couldn\'t be read.</strong> Nothing has been deleted. Download the damaged copy so it can be repaired; saving is paused until you do.';
     actions = '<button class="btn btn-primary" data-act="damaged">Download damaged copy</button>';
+  } else if(saveFailed && SB_DESKTOP){
+    cls = 'danger';
+    msg = '<strong>Your last change could not be saved to your Study Binder folder.</strong> Press Back up now so nothing is lost, then close Study Binder and open it again from the desktop icon.';
+    actions = '<button class="btn btn-primary" data-act="backup">Back up now</button>';
   } else if(saveFailed){
     cls = 'danger';
     msg = '<strong>Your last change could not be saved.</strong> The browser\'s storage is full or blocked. Download a backup now so nothing is lost, then remove large notes you no longer need.';
     actions = '<button class="btn btn-primary" data-act="backup">Back up now</button>';
+  } else if(SB_DESKTOP && SB_DESKTOP.notice && SB_DESKTOP.notice.kind === 'recovered'){
+    cls = 'warn';
+    msg = `<strong>Your binder file couldn't be read, so your notes were brought back from the automatic backup saved ${escapeHtml(new Date(SB_DESKTOP.notice.when).toLocaleString('en-GB'))}.</strong> Nothing was deleted: the unreadable file was kept as <code>${escapeHtml(SB_DESKTOP.notice.damaged)}</code> in your Study Binder folder.`;
+    actions = '<button class="btn btn-ghost" data-act="open-folder">Open folder</button><button class="btn btn-primary" data-act="dismiss-notice">OK</button>';
   } else if(appError){
     cls = 'warn';
     msg = `<strong>Something went wrong:</strong> ${escapeHtml(appError)}. Your notes are still saved. If the page acts strangely, back up and then reload.`;
@@ -861,7 +941,7 @@ function renderSafetyBanner(){
     cls = 'warn';
     msg = '<strong>Your saved binder couldn\'t be read</strong>, so the app started fresh. A copy of the old data was kept safe in this browser. Download it so it can be repaired.';
     actions = '<button class="btn btn-primary" data-act="damaged">Download damaged copy</button>';
-  } else if(storageUsed > STORAGE_SOFT_LIMIT){
+  } else if(!SB_DESKTOP && storageUsed > STORAGE_SOFT_LIMIT){
     cls = 'warn';
     msg = `<strong>Browser storage is ${Math.round(storageUsed / 50000)}% full.</strong> Back up now, and consider deleting old notes or moving a finished topic out by backing it up.`;
     actions = '<button class="btn btn-primary" data-act="backup">Back up now</button>';
@@ -877,13 +957,22 @@ function renderSafetyBanner(){
     cls = 'danger';
     msg = '<strong>Auto-backup couldn\'t save to its file.</strong> It may have been moved, renamed or deleted.';
     actions = '<button class="btn btn-primary" data-act="auto-choose">Choose the file again</button>';
+  } else if(SB_DESKTOP && freshStart && !hasOwnContent && !freshDismissed){
+    const f = desktopFound[0];
+    if(f){
+      msg = `<strong>Welcome to the Study Binder app.</strong> We found a backup of your notes: <code>${escapeHtml(f.name)}</code> with ${f.notes} note${f.notes===1?'':'s'} in ${f.topics} topic${f.topics===1?'':'s'}, saved ${escapeHtml(new Date(f.modified).toLocaleString('en-GB'))}. Load it?`;
+      actions = '<button class="btn btn-ghost" data-act="fresh-dismiss">No thanks</button><button class="btn btn-ghost" data-act="restore-file">Choose another file</button><button class="btn btn-primary" data-act="load-found">Load my notes</button>';
+    } else {
+      msg = '<strong>Welcome to the Study Binder app.</strong> To bring your notes over, open the old Study Binder website, press ⬇ Backup, then come back here, press ⬆ Restore and pick the file it downloaded.';
+      actions = '<button class="btn btn-ghost" data-act="fresh-dismiss">I\'m starting fresh</button><button class="btn btn-primary" data-act="restore-file">Restore from a file</button>';
+    }
   } else if(freshStart && !hasOwnContent && !freshDismissed){
     cls = '';
     msg = '<strong>This binder is empty.</strong> If you had notes before (for example, after clearing your browser), press Restore and pick your backup file, such as <strong>study-binder-autobackup.json</strong>.';
     actions = '<button class="btn btn-ghost" data-act="fresh-dismiss">I\'m starting fresh</button><button class="btn btn-primary" data-act="restore-file">Restore from a file</button>';
   } else if(typeof autoState !== 'undefined' && autoState === 'on'){
     // auto-backup is keeping a file up to date, so no reminder needed
-  } else if(hasOwnContent && lastChange > lastBackup && Date.now() > snoozeUntil &&
+  } else if(!SB_DESKTOP && hasOwnContent && lastChange > lastBackup && Date.now() > snoozeUntil &&
             (!lastBackup || daysSince(lastBackup) >= BACKUP_EVERY_DAYS)){
     cls = '';
     msg = lastBackup
@@ -907,9 +996,12 @@ function renderSafetyBanner(){
     if(act === 'restore-file') $('restoreInput').click();
     if(act === 'snooze'){ lsSet(SNOOZE_KEY, Date.now() + 86400000); renderSafetyBanner(); }
     if(act === 'dismiss-error'){ appError = null; renderSafetyBanner(); }
+    if(act === 'open-folder') desktopCall('/api/open-folder', { which: 'data' });
+    if(act === 'dismiss-notice'){ SB_DESKTOP.notice = null; desktopCall('/api/dismiss-notice', {}); renderSafetyBanner(); }
+    if(act === 'load-found') loadFoundBackup(desktopFound[0]);
     if(act === 'damaged'){
       downloadJson(damagedRaw, `study-binder-damaged-${stamp()}.json`);
-      try{ localStorage.removeItem(CORRUPT_KEY); }catch(e){}
+      try{ appStore.removeItem(CORRUPT_KEY); }catch(e){}
       savesPaused = false;
       damagedRaw = null;
       saveData();
@@ -1539,7 +1631,7 @@ document.addEventListener('keydown', (e) => {
 
 // ---- always run the latest version of the site ----
 // Bump APP_VERSION here AND in version.json every time the site is published.
-const APP_VERSION = '2026-09-28.2';
+const APP_VERSION = '2026-09-28.3';
 function busyForUpdate(){
   return $('overlay').classList.contains('open') || isListening || isSummarizing || autoWriting;
 }
@@ -1679,11 +1771,11 @@ function getRecognition(){
 
 const VOICE_STORE = 'binder-voice';
 function saveVoice(){
-  try{ localStorage.setItem(VOICE_STORE, JSON.stringify({ transcript: liveTranscript, summary: currentSummary, level: currentSummaryLevel })); }catch(e){}
+  try{ appStore.setItem(VOICE_STORE, JSON.stringify({ transcript: liveTranscript, summary: currentSummary, level: currentSummaryLevel })); }catch(e){}
 }
 function loadVoice(){
   try{
-    const v = JSON.parse(localStorage.getItem(VOICE_STORE) || 'null');
+    const v = JSON.parse(appStore.getItem(VOICE_STORE) || 'null');
     if(v){ liveTranscript = v.transcript || ''; currentSummary = v.summary || ''; currentSummaryLevel = v.level || null; }
   }catch(e){}
 }
@@ -1941,8 +2033,8 @@ const GEMINI_KEY_STORE = 'binder-gemini-key';
 const GEMINI_MODEL = 'gemini-3.6-flash';
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
-function getGeminiKey(){ try{ return localStorage.getItem(GEMINI_KEY_STORE) || ''; }catch(e){ return ''; } }
-function setGeminiKey(key){ try{ if(key){ localStorage.setItem(GEMINI_KEY_STORE, key); } else { localStorage.removeItem(GEMINI_KEY_STORE); } }catch(e){} }
+function getGeminiKey(){ try{ return appStore.getItem(GEMINI_KEY_STORE) || ''; }catch(e){ return ''; } }
+function setGeminiKey(key){ try{ if(key){ appStore.setItem(GEMINI_KEY_STORE, key); } else { appStore.removeItem(GEMINI_KEY_STORE); } }catch(e){} }
 
 async function callGemini(prompt, opts, attempt){
   attempt = attempt || 1;
@@ -2212,6 +2304,7 @@ function keepThisBinderInFile(){
 }
 
 async function initAutoBackup(){
+  if(SB_DESKTOP){ autoState = 'desktop'; renderAutoBackupUI(); return; }
   if(!autoSupported()){ autoState = 'unsupported'; renderAutoBackupUI(); return; }
   const handle = await idbGet('autobackup');
   if(!handle){ autoState = 'off'; renderAutoBackupUI(); return; }
@@ -2232,6 +2325,7 @@ function timeAgo(ts){
 }
 
 function renderAutoBackupUI(){
+  if(SB_DESKTOP) return renderDesktopPanel();
   const btn = $('autoBackupBtn');
   const labels = { off: '💾 Auto-backup: off', on: '💾 Auto-backup: on', reconnect: '💾 Auto-backup: paused', error: '💾 Auto-backup: problem', conflict: '💾 Auto-backup: check', unsupported: '💾 Auto-backup' };
   btn.textContent = labels[autoState] || labels.off;
@@ -2285,7 +2379,78 @@ function bindAutoButtons(root){
   }));
 }
 
-$('autoBackupBtn').addEventListener('click', () => { autoPanelOpen = !autoPanelOpen; renderAutoBackupUI(); });
+$('autoBackupBtn').addEventListener('click', () => {
+  autoPanelOpen = !autoPanelOpen;
+  renderAutoBackupUI();
+  if(SB_DESKTOP && autoPanelOpen) refreshDesktopInfo();
+});
+
+// ---- desktop app: everything is saved to files on this computer ----
+var desktopFound = [];   // backups from the website found on this computer (first run only)
+var desktopBusy = false;
+
+async function desktopCall(path, payload){
+  try{ return await SB_DESKTOP.api(path, payload); }
+  catch(e){ alert('Study Binder couldn\'t do that: ' + e.message); return null; }
+}
+async function refreshDesktopInfo(){
+  try{ const r = await SB_DESKTOP.api('/api/info'); SB_DESKTOP.info = r.info; renderAutoBackupUI(); }catch(e){}
+}
+function renderDesktopPanel(){
+  const btn = $('autoBackupBtn');
+  const info = SB_DESKTOP.info || {};
+  btn.textContent = '📁 Saved on this PC';
+  btn.classList.add('auto-on');
+  renderSafetyBanner();
+  const host = $('autoBackupPanel');
+  if(!autoPanelOpen){ host.innerHTML = ''; return; }
+  const cloud = info.inOneDrive
+    ? '<p>☁ This folder is in <strong>OneDrive</strong>, so there\'s a copy in the cloud too.</p>'
+    : (info.canMoveToOneDrive
+      ? '<p class="hint">Want a copy in the cloud as well? Move the folder into OneDrive. Your notes are copied and checked first, and the old folder is kept.</p>'
+      : '');
+  host.innerHTML = `<div class="auto-panel"><div class="deadlines-head"><h3>📁 Saved on this PC</h3><button class="related-close" data-desk="close">✕</button></div>
+    <p>✓ Every change is saved straight away to <code>${escapeHtml(info.dataDir || '')}</code></p>
+    <p>An automatic backup copy is kept every half hour while you work (${info.backupCount || 0} kept so far, newest ${escapeHtml(timeAgo(info.lastBackup))}).</p>
+    ${cloud}
+    <div class="row">
+      <button class="btn btn-primary" data-desk="open">Open my Study Binder folder</button>
+      <button class="btn btn-ghost" data-desk="backups">Open backups folder</button>
+      <button class="btn btn-ghost" data-desk="backup-now">Make a backup copy now</button>
+      ${info.canMoveToOneDrive ? '<button class="btn btn-ghost" data-desk="onedrive">Move folder to OneDrive</button>' : ''}
+    </div></div>`;
+  host.querySelectorAll('[data-desk]').forEach(b => b.addEventListener('click', async () => {
+    const act = b.getAttribute('data-desk');
+    if(act === 'close'){ autoPanelOpen = false; renderAutoBackupUI(); }
+    if(act === 'open') desktopCall('/api/open-folder', { which: 'data' });
+    if(act === 'backups') desktopCall('/api/open-folder', { which: 'backups' });
+    if(act === 'backup-now'){
+      const r = await desktopCall('/api/backup-now', {});
+      if(r){ SB_DESKTOP.info = r.info; renderAutoBackupUI(); setStatus('Backup copy saved'); }
+    }
+    if(act === 'onedrive'){
+      if(desktopBusy) return;
+      if(!confirm(`Move your Study Binder folder to OneDrive?\n\nNew folder: ${info.oneDriveTarget}\n\nYour notes are copied and checked first. The old folder is kept as a spare copy.`)) return;
+      desktopBusy = true;
+      const r = await desktopCall('/api/move-to-onedrive', {});
+      desktopBusy = false;
+      if(r){ SB_DESKTOP.info = r.info; renderAutoBackupUI(); setStatus('Moved to OneDrive'); }
+    }
+  }));
+}
+async function loadFoundBackup(f){
+  if(!f) return;
+  const r = await desktopCall('/api/read-found', { path: f.path });
+  if(r) applyRestoreText(r.text, `the backup ${f.name}`);
+}
+async function findWebsiteBackups(){
+  if(!SB_DESKTOP || !freshStart) return;
+  try{
+    const r = await SB_DESKTOP.api('/api/found-backups');
+    desktopFound = r.found || [];
+    renderSafetyBanner();
+  }catch(e){}
+}
 
 // If the page is closed or hidden with a backup still waiting, write it now.
 document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'hidden' && autoTimer) writeAutoBackup(); });
@@ -2521,8 +2686,15 @@ function scheduleAutoSave(){
   note.content = $('editContent').value;
   note.updatedAt = Date.now();
   clearTimeout(autoSaveTimer);
-  autoSaveTimer = setTimeout(() => { mergeExternalChanges(); saveData(); }, 800);
+  autoSaveTimer = setTimeout(() => { autoSaveTimer = null; mergeExternalChanges(); saveData(); }, 800);
 }
+// Closing the window within a moment of typing: save what was typed.
+window.addEventListener('pagehide', () => {
+  if(!autoSaveTimer) return;
+  clearTimeout(autoSaveTimer); autoSaveTimer = null;
+  if(SB_DESKTOP) SB_DESKTOP.beacon(STORE_KEY, JSON.stringify(data));
+  else saveData();
+});
 $('editTitle').addEventListener('input', scheduleAutoSave);
 $('editContent').addEventListener('input', scheduleAutoSave);
 
@@ -2587,6 +2759,7 @@ $('searchInput').addEventListener('input', (e) => {
   loadVoice();
   renderThemeBtn();
   initAutoBackup();
+  findWebsiteBackups();
   checkForUpdate();
   // ask the browser not to clear this site's storage when disk space runs low
   try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}
