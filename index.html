@@ -366,6 +366,50 @@
   .auto-panel .row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
   .auto-panel code{ font-family:'IBM Plex Mono',monospace; font-size:12px; background:var(--paper); padding:1px 5px; border-radius:4px; }
 
+  /* ---- calendar ---- */
+  #calOverlay{ padding:0; z-index:30; background:var(--paper); }
+  .cal-page{ width:100%; min-height:100vh; }
+  .cal-nav{ display:flex; align-items:center; gap:6px; }
+  .cal-nav .btn{ padding:6px 11px; font-size:15px; }
+  #calToday{ font-size:12px; }
+  .cal-title{ font-family:'Spectral',serif; font-size:22px; margin:0 6px; min-width:190px; text-align:center; font-weight:700; }
+  .cal-inner{ max-width:1200px; margin:0 auto; padding:18px 24px 50px 24px; }
+  .cal-grid{ display:grid; grid-template-columns:repeat(7, minmax(0,1fr)); border:1px solid var(--paper-edge); border-radius:10px; overflow:hidden; background:var(--paper-edge); gap:1px; }
+  .cal-dow{ background:var(--paper-card); font-family:'IBM Plex Mono',monospace; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); padding:8px; text-align:center; }
+  .cal-day{ background:var(--surface); min-height:108px; padding:6px 6px 8px 6px; cursor:pointer; display:flex; flex-direction:column; gap:4px; position:relative; min-width:0; }
+  .cal-day:hover{ outline:2px solid var(--ink-soft); outline-offset:-2px; }
+  .cal-day.other{ background:var(--paper-card); }
+  .cal-day.other .cal-num{ opacity:.45; }
+  .cal-day.past .cal-num{ opacity:.55; }
+  .cal-day.weekend{ background:color-mix(in srgb, var(--surface) 92%, var(--ink) 8%); }
+  .cal-day.other.weekend{ background:var(--paper-card); }
+  .cal-day.selected{ outline:2px solid var(--ink); outline-offset:-2px; }
+  .cal-num{ font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink); width:24px; height:24px; display:flex; align-items:center; justify-content:center; border-radius:50%; }
+  .cal-day.today .cal-num{ background:var(--ink); color:var(--paper); font-weight:600; }
+  .cal-chip{ display:block; width:100%; border:none; border-radius:5px; padding:3px 6px; color:#fff; font-family:'Inter',sans-serif; font-size:11.5px; font-weight:600;
+    text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,.15); }
+  .cal-chip:hover{ filter:brightness(1.1); }
+  .cal-chip.overdue::before{ content:"⚠ "; }
+  .cal-day.has-deadline{ box-shadow:inset 0 3px 0 var(--deadline-colour); }
+  .cal-panel{ margin-top:14px; background:var(--paper-card); border:1px solid var(--paper-edge); border-radius:8px; padding:14px 16px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; font-size:13.5px; }
+  .cal-panel strong{ font-family:'Spectral',serif; font-size:16px; }
+  .cal-panel select{ font-family:'Inter',sans-serif; font-size:13px; padding:6px 8px; border:1px solid var(--paper-edge); border-radius:6px; background:var(--surface); color:var(--ink); }
+  .cal-panel .existing{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; width:100%; }
+  .cal-legend{ margin-top:18px; display:flex; flex-wrap:wrap; gap:8px 18px; }
+  .cal-legend-item{ display:flex; align-items:center; gap:7px; font-size:13px; cursor:pointer; }
+  .cal-legend-item .topic-swatch{ width:14px; height:14px; }
+  .cal-legend-item .when{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft); }
+  .cal-legend-item .when.overdue{ color:var(--danger); }
+  .cal-legend-item .when.soon{ color:var(--mustard); }
+  @media (max-width:700px){
+    .cal-inner{ padding:10px 8px 40px 8px; }
+    .cal-day{ min-height:64px; padding:3px; }
+    .cal-chip{ font-size:0; padding:0; height:8px; border-radius:4px; }
+    .cal-chip.overdue::before{ content:""; }
+    .cal-title{ font-size:18px; min-width:0; }
+    .cal-dow{ font-size:9px; padding:6px 2px; }
+  }
+
   /* ---- deadlines ---- */
   .deadlines-panel{ margin-top:10px; background:var(--paper-card); border:1px solid var(--paper-edge); border-radius:8px; padding:14px 16px; max-width:560px; }
   .deadlines-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
@@ -427,6 +471,7 @@
         <button id="restoreBtn">⬆ Restore</button>
         <button id="apiKeyBtn">🔑 Google API key</button>
         <button id="autoBackupBtn">💾 Auto-backup: off</button>
+        <button id="calendarBtn">🗓 Calendar</button>
         <button id="deadlinesBtn">📅 Deadlines</button>
         <button id="themeBtn">🌙 Dark mode</button>
         <input type="file" id="restoreInput" accept="application/json" style="display:none;">
@@ -550,6 +595,26 @@
         </div>
         <div id="relatedInline"></div>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="calOverlay">
+  <div class="cal-page">
+    <div class="editor-bar">
+      <div class="cal-nav">
+        <button class="btn btn-ghost" id="calPrev" title="Previous month">‹</button>
+        <h2 class="cal-title" id="calTitle"></h2>
+        <button class="btn btn-ghost" id="calNext" title="Next month">›</button>
+        <button class="btn btn-ghost" id="calToday">Today</button>
+      </div>
+      <span class="editor-bar-hint">Click a day to set a deadline · Esc to close</span>
+      <button class="btn btn-primary" id="calClose">Close</button>
+    </div>
+    <div class="cal-inner">
+      <div class="cal-grid" id="calGrid"></div>
+      <div id="calDayPanel"></div>
+      <div class="cal-legend" id="calLegend"></div>
     </div>
   </div>
 </div>
@@ -1251,7 +1316,7 @@ function closeEditor(){
   renderSidebar();
 }
 
-function render(){ renderSpine(); renderTabs(); renderHeader(); renderSearchScope(); renderCards(); renderRelatedHost(); renderDeadlines(); renderSafetyBanner(); }
+function render(){ if(typeof renderCalendar === 'function') renderCalendar(); renderSpine(); renderTabs(); renderHeader(); renderSearchScope(); renderCards(); renderRelatedHost(); renderDeadlines(); renderSafetyBanner(); }
 
 // ---- note formatting toolbar ----
 let previewOn = false;
@@ -1312,11 +1377,12 @@ function renderDeadlines(){
     </div>`;
   }).join('');
   host.innerHTML = `<div class="deadlines-panel">
-    <div class="deadlines-head"><h3>📅 Upcoming deadlines</h3><button class="related-close" id="deadlinesClose">✕</button></div>
+    <div class="deadlines-head"><h3>📅 Upcoming deadlines</h3><span><button class="btn btn-ghost" id="deadlinesCalBtn">🗓 Open calendar</button><button class="related-close" id="deadlinesClose">✕</button></span></div>
     ${dated.length ? rows : '<div class="deadlines-empty">No due dates yet. Press ✎ next to a topic name to add one.</div>'}
     ${dated.length && undated ? `<div class="deadlines-empty" style="margin-top:8px;">${undated} topic${undated===1?' has':'s have'} no due date.</div>` : ''}
   </div>`;
   $('deadlinesClose').addEventListener('click', () => { deadlinesOpen = false; renderDeadlines(); });
+  $('deadlinesCalBtn').addEventListener('click', openCalendar);
   host.querySelectorAll('.deadline-row').forEach(row => row.addEventListener('click', () => {
     activeTopicId = row.getAttribute('data-topic');
     searchQuery = ''; $('searchInput').value = ''; searchScope = 'topic';
@@ -1324,6 +1390,145 @@ function renderDeadlines(){
   }));
 }
 $('deadlinesBtn').addEventListener('click', () => { deadlinesOpen = !deadlinesOpen; renderDeadlines(); });
+
+// ---- calendar ----
+let calMonth = null;       // Date set to the 1st of the month being shown
+let calSelected = null;    // 'YYYY-MM-DD' of the clicked day
+function isoDate(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+
+function openCalendar(){
+  const now = new Date();
+  if(!calMonth) calMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  calSelected = null;
+  $('calOverlay').classList.add('open');
+  document.body.classList.add('editor-open');
+  renderCalendar();
+}
+function closeCalendar(){
+  $('calOverlay').classList.remove('open');
+  if(!$('overlay').classList.contains('open')) document.body.classList.remove('editor-open');
+}
+
+function renderCalendar(){
+  if(!$('calOverlay').classList.contains('open')) return;
+  const y = calMonth.getFullYear(), m = calMonth.getMonth();
+  $('calTitle').textContent = calMonth.toLocaleDateString('en-GB', { month:'long', year:'numeric' });
+  const todayIso = isoDate(new Date());
+  const byDate = {};
+  data.topics.forEach((t, i) => { if(t.dueDate){ (byDate[t.dueDate] = byDate[t.dueDate] || []).push({ t, colour: topicColor(t, i) }); } });
+
+  const first = new Date(y, m, 1);
+  const start = new Date(y, m, 1 - ((first.getDay() + 6) % 7));   // weeks start on Monday
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const cells = Math.ceil((((first.getDay() + 6) % 7) + daysInMonth) / 7) * 7;
+  let html = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d => `<div class="cal-dow">${d}</div>`).join('');
+  for(let i = 0; i < cells; i++){
+    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+    const iso = isoDate(d);
+    const items = byDate[iso] || [];
+    const cls = ['cal-day'];
+    if(d.getMonth() !== m) cls.push('other');
+    if(iso === todayIso) cls.push('today');
+    else if(iso < todayIso) cls.push('past');
+    if(d.getDay() === 0 || d.getDay() === 6) cls.push('weekend');
+    if(iso === calSelected) cls.push('selected');
+    if(items.length) cls.push('has-deadline');
+    const chips = items.map(({ t, colour }) => {
+      const due = dueLabel(t.dueDate);
+      return `<button class="cal-chip ${due.cls === 'overdue' ? 'overdue' : ''}" data-topic="${t.id}" style="background:${colour}"
+        title="${escapeHtml(t.name)}: due ${escapeHtml(due.fullDate)} (${escapeHtml(due.text)})">${escapeHtml(t.name)}</button>`;
+    }).join('');
+    html += `<div class="${cls.join(' ')}" data-date="${iso}" ${items.length ? `style="--deadline-colour:${items[0].colour}"` : ''}>
+      <span class="cal-num">${d.getDate()}</span>${chips}</div>`;
+  }
+  const grid = $('calGrid');
+  grid.innerHTML = html;
+  grid.querySelectorAll('.cal-chip').forEach(chip => chip.addEventListener('click', (e) => {
+    e.stopPropagation();
+    goToTopic(chip.getAttribute('data-topic'));
+  }));
+  grid.querySelectorAll('.cal-day').forEach(cell => cell.addEventListener('click', () => {
+    calSelected = cell.getAttribute('data-date');
+    renderCalendar();
+  }));
+  renderCalDayPanel();
+  renderCalLegend();
+}
+
+function goToTopic(topicId){
+  activeTopicId = topicId;
+  searchQuery = ''; $('searchInput').value = ''; searchScope = 'topic';
+  closeCalendar();
+  render();
+}
+
+function renderCalDayPanel(){
+  const host = $('calDayPanel');
+  if(!calSelected){ host.innerHTML = ''; return; }
+  const [yy, mm, dd] = calSelected.split('-').map(Number);
+  const nice = new Date(yy, mm - 1, dd).toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+  const onDay = data.topics.filter(t => t.dueDate === calSelected);
+  const others = data.topics.filter(t => t.dueDate !== calSelected);
+  host.innerHTML = `<div class="cal-panel">
+    <strong>${escapeHtml(nice)}</strong>
+    ${others.length ? `<span>Set as the deadline for</span>
+      <select id="calTopicSelect">${others.map(t => `<option value="${t.id}">${escapeHtml(t.name)}${t.dueDate ? ` (now ${escapeHtml(formatUKDate(t.dueDate))})` : ''}</option>`).join('')}</select>
+      <button class="btn btn-primary" id="calSetBtn">Set deadline</button>` : '<span>Every topic is due on this day.</span>'}
+    ${onDay.length ? `<div class="existing"><span>Due this day:</span>${onDay.map(t => {
+      const i = data.topics.indexOf(t);
+      return `<span class="cal-legend-item"><span class="topic-swatch" style="background:${topicColor(t, i)}"></span>${escapeHtml(t.name)}</span>
+        <button class="btn btn-danger" data-remove="${t.id}">Remove deadline</button>`; }).join('')}</div>` : ''}
+  </div>`;
+  const setBtn = $('calSetBtn');
+  if(setBtn) setBtn.addEventListener('click', () => {
+    const t = data.topics.find(x => x.id === $('calTopicSelect').value);
+    if(!t) return;
+    t.dueDate = calSelected;
+    saveData(); render(); renderCalendar();
+    setStatus(`Deadline set for ${t.name}`);
+  });
+  host.querySelectorAll('[data-remove]').forEach(b => b.addEventListener('click', () => {
+    const t = data.topics.find(x => x.id === b.getAttribute('data-remove'));
+    if(!t) return;
+    t.dueDate = null;
+    saveData(); render(); renderCalendar();
+  }));
+}
+
+function renderCalLegend(){
+  const topics = data.topics.slice().sort((a, b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999'));
+  $('calLegend').innerHTML = topics.map(t => {
+    const i = data.topics.indexOf(t);
+    const due = dueLabel(t.dueDate);
+    return `<span class="cal-legend-item" data-topic="${t.id}" data-due="${t.dueDate || ''}">
+      <span class="topic-swatch" style="background:${topicColor(t, i)}"></span>${escapeHtml(t.name)}
+      <span class="when ${due ? due.cls : ''}">${due ? `${escapeHtml(due.fullDate)} · ${escapeHtml(due.text)}` : 'no deadline'}</span></span>`;
+  }).join('');
+  $('calLegend').querySelectorAll('.cal-legend-item').forEach(el => el.addEventListener('click', () => {
+    const due = el.getAttribute('data-due');
+    if(due){
+      const [yy, mm] = due.split('-').map(Number);
+      calMonth = new Date(yy, mm - 1, 1);
+      calSelected = due;
+      renderCalendar();
+    } else {
+      goToTopic(el.getAttribute('data-topic'));
+    }
+  }));
+}
+
+$('calendarBtn').addEventListener('click', openCalendar);
+$('calClose').addEventListener('click', closeCalendar);
+$('calPrev').addEventListener('click', () => { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() - 1, 1); calSelected = null; renderCalendar(); });
+$('calNext').addEventListener('click', () => { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1); calSelected = null; renderCalendar(); });
+$('calToday').addEventListener('click', () => { const n = new Date(); calMonth = new Date(n.getFullYear(), n.getMonth(), 1); calSelected = isoDate(n); renderCalendar(); });
+document.addEventListener('keydown', (e) => {
+  if(!$('calOverlay').classList.contains('open')) return;
+  if(e.key === 'Escape') closeCalendar();
+  if(e.target.closest && e.target.closest('input, select, textarea')) return;
+  if(e.key === 'ArrowLeft') $('calPrev').click();
+  if(e.key === 'ArrowRight') $('calNext').click();
+});
 
 // ---- dark mode ----
 function isDark(){
