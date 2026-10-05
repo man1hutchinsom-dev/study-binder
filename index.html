@@ -322,6 +322,7 @@ try{ var th = appStore.getItem('binder-theme'); if(th) document.documentElement.
   .mic-btn:hover{ filter:brightness(1.15); }
   .mic-btn.listening{ background:var(--danger); }
   .mic-btn.listening .dot{ animation:pulse 1s infinite; }
+  #editorMicBtn.mic-on{ background:var(--danger); color:#fff; }
   .dot{ width:8px;height:8px;border-radius:50%; background:#fff; display:inline-block; }
   @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:.25;} }
   .voice-status{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft); margin-top:8px; min-height:14px; }
@@ -1951,7 +1952,7 @@ document.addEventListener('keydown', (e) => {
 
 // ---- always run the latest version of the site ----
 // Bump APP_VERSION here AND in version.json every time the site is published.
-const APP_VERSION = '2026-10-05.1';
+const APP_VERSION = '2026-10-05.2';
 function busyForUpdate(){
   return $('overlay').classList.contains('open') || isListening || isSummarizing || autoWriting;
 }
@@ -2159,8 +2160,8 @@ function renderSidebar(){
 
   $('insertVoiceBtn').disabled = !editingNoteId || (!hasTranscript && !currentSummary);
   $('editorInsertVoiceBtn').disabled = !(hasTranscript || currentSummary);
-  $('editorMicBtn').textContent = isListening ? '⏹ Stop listening' : '🎙 Start listening';
-  $('editorMicBtn').classList.toggle('btn-primary', isListening);
+  $('editorMicBtn').textContent = isListening ? '🔴 Listening · press to stop' : '🎙 Start listening';
+  $('editorMicBtn').classList.toggle('mic-on', isListening);
   const liveText = (liveTranscript + interimText).trim();
   $('editorVoiceLive').textContent = liveText ? '…' + liveText.slice(-300) : '';
 
@@ -2173,12 +2174,106 @@ function renderSidebar(){
   $('clearVoiceBtn').disabled = !hasTranscript && !currentSummary;
 }
 
+// Listening stays on until the user presses Stop. The browser's speech service
+// ends a session on its own (silence, time limit, network blip), so whenever it
+// ends without the user asking, a fresh session is started straight away.
+const LISTEN_ON_STATUS = 'Listening… it keeps going until you press Stop.';
+let restartTimer = null;
+let restartFails = 0;      // quick failures in a row, used to back off
+let lastStartAt = 0;
+let recActive = false;     // a recognition session is actually running
+
 function stopListening(){
-  if(recognition){ try{ recognition.stop(); }catch(e){} }
   isListening = false;
-  interimText = '';
+  clearTimeout(restartTimer); restartTimer = null;
+  const r = recognition;
+  if(r){ try{ r.stop(); }catch(e){} }
+  // The last words usually arrive as a final result just after stop(); onend
+  // keeps anything still half-heard. If the session never reports back, keep
+  // the half-heard words anyway and ignore anything it sends later.
+  setTimeout(() => {
+    if(recognition === r && !isListening && recActive){
+      recActive = false; recognition = null;
+      if(interimText.trim()){ liveTranscript += interimText.trim() + ' '; saveVoice(); }
+      interimText = '';
+      renderSidebar();
+    }
+  }, 2000);
   renderSidebar();
 }
+
+function scheduleRestart(){
+  if(!isListening || restartTimer) return;
+  // back off a little if the service keeps failing straight away (e.g. offline)
+  const delay = restartFails === 0 ? 150 : Math.min(5000, 500 * restartFails);
+  restartTimer = setTimeout(() => { restartTimer = null; startRecognitionSession(); }, delay);
+}
+
+function startRecognitionSession(){
+  if(!isListening) return;
+  const r = getRecognition();
+  if(!r) return;
+  recognition = r;
+  r.onstart = () => {
+    if(r !== recognition) return;
+    recActive = true;
+    setVoiceStatus(LISTEN_ON_STATUS);
+  };
+  r.onresult = (event) => {
+    if(r !== recognition) return;
+    interimText = '';
+    for(let i = event.resultIndex; i < event.results.length; i++){
+      const chunk = event.results[i][0].transcript;
+      if(event.results[i].isFinal){ liveTranscript += chunk.trim() + ' '; saveVoice(); }
+      else{ interimText += chunk; }
+    }
+    restartFails = 0;
+    renderSidebar();
+    const box = $('voiceLive'); box.scrollTop = box.scrollHeight;
+  };
+  r.onerror = (event) => {
+    if(r !== recognition) return;
+    const err = event.error;
+    if(err === 'not-allowed' || err === 'service-not-allowed'){
+      setVoiceStatus('Microphone access was blocked.');
+      stopListening();
+    } else if(err === 'audio-capture'){
+      setVoiceStatus('No microphone found. Check it is plugged in, then press Start.');
+      stopListening();
+    } else if(err === 'network'){
+      setVoiceStatus('Connection dropped — reconnecting the microphone…');
+    }
+    // anything else (silence, aborted…) just ends this session; onend restarts it
+  };
+  r.onend = () => {
+    if(r !== recognition) return;
+    recActive = false;
+    // words that were still being worked out when the session ended
+    if(interimText.trim()){ liveTranscript += interimText.trim() + ' '; saveVoice(); }
+    interimText = '';
+    if(!isListening){ renderSidebar(); return; }
+    if(Date.now() - lastStartAt < 1500) restartFails++; else restartFails = 0;
+    if(restartFails > 2) setVoiceStatus('Reconnecting the microphone…');
+    renderSidebar();
+    scheduleRestart();
+  };
+  try{
+    lastStartAt = Date.now();
+    r.start();
+  }catch(e){
+    restartFails++;
+    scheduleRestart();
+  }
+}
+
+// Safety net: if a session ever dies without telling us, start a new one.
+setInterval(() => {
+  if(isListening && !recActive && !restartTimer && Date.now() - lastStartAt > 4000){
+    if(recognition){ try{ recognition.abort(); }catch(e){} }
+    recognition = null;
+    startRecognitionSession();
+  }
+}, 3000);
 
 $('micBtn').addEventListener('click', () => {
   if(isListening){
@@ -2191,31 +2286,11 @@ $('micBtn').addEventListener('click', () => {
     setVoiceStatus('Live transcription isn\'t supported in this browser — try Chrome.');
     return;
   }
-  setVoiceStatus('Listening…');
-  recognition = getRecognition();
-  recognition.onresult = (event) => {
-    interimText = '';
-    for(let i = event.resultIndex; i < event.results.length; i++){
-      const chunk = event.results[i][0].transcript;
-      if(event.results[i].isFinal){ liveTranscript += chunk + ' '; saveVoice(); }
-      else{ interimText += chunk; }
-    }
-    renderSidebar();
-    const box = $('voiceLive'); box.scrollTop = box.scrollHeight;
-  };
-  recognition.onerror = (event) => {
-    setVoiceStatus(event.error === 'not-allowed' ? 'Microphone access was blocked.' : `Error: ${event.error}`);
-    stopListening();
-  };
-  recognition.onend = () => { if(isListening){ try{ recognition.start(); }catch(e){} } };
-
-  try{
-    recognition.start();
-    isListening = true;
-    renderSidebar();
-  }catch(e){
-    setVoiceStatus('Could not start the microphone.');
-  }
+  isListening = true;
+  restartFails = 0;
+  setVoiceStatus(LISTEN_ON_STATUS);
+  renderSidebar();
+  startRecognitionSession();
 });
 
 async function summarizeAtLevel(level){
