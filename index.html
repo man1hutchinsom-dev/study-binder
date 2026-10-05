@@ -250,7 +250,7 @@ try{ var th = appStore.getItem('binder-theme'); if(th) document.documentElement.
   .editor-bar-hint{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft); flex:1; text-align:center; }
   .editor-inner{ max-width:1100px; margin:0 auto; padding:22px 28px 60px 28px; }
   #overlay .editor input#editTitle{ font-size:26px; padding:6px 2px 10px 2px; }
-  #overlay .editor textarea{ min-height:calc(100vh - 210px); font-size:16px; line-height:1.7; padding:16px 18px; }
+  #overlay .editor textarea, #overlay .editor .rich-editor{ min-height:calc(100vh - 210px); font-size:16px; line-height:1.7; padding:16px 18px; }
   #overlay .md-preview{ min-height:calc(100vh - 210px); font-size:16px; line-height:1.7; padding:16px 18px; }
   .editor-extras{ margin-top:28px; padding-top:18px; border-top:2px solid var(--paper-edge); }
   .extras-title{ font-family:'Spectral',serif; font-size:18px; margin:0 0 14px 0; font-weight:600; }
@@ -275,6 +275,18 @@ try{ var th = appStore.getItem('binder-theme'); if(th) document.documentElement.
     border:1px solid var(--paper-edge); border-radius:6px; padding:12px; resize:vertical; color:var(--ink); background:var(--surface);
   }
   .editor textarea:focus{ outline:2px solid var(--slate); outline-offset:1px;}
+  .rich-editor{
+    width:100%; min-height:200px; font-family:'Inter',sans-serif; font-size:14px; line-height:1.6; overflow-wrap:anywhere;
+    border:1px solid var(--paper-edge); border-radius:6px; padding:12px; color:var(--ink); background:var(--surface); white-space:pre-wrap;
+  }
+  .rich-editor:focus{ outline:2px solid var(--slate); outline-offset:1px; }
+  .rich-editor.is-empty::before{ content:attr(data-placeholder); color:var(--ink-soft); pointer-events:none; position:absolute; }
+  .rich-editor h1,.rich-editor h2,.rich-editor h3{ font-family:'Spectral',serif; margin:.3em 0 .2em 0; line-height:1.25; }
+  .rich-editor h1{ font-size:1.4em; } .rich-editor h2{ font-size:1.22em; } .rich-editor h3{ font-size:1.08em; }
+  .rich-editor ul,.rich-editor ol{ margin:.1em 0; padding-left:24px; }
+  .rich-editor code{ font-family:'IBM Plex Mono',monospace; font-size:.9em; background:var(--paper); padding:1px 4px; border-radius:3px; }
+  .rich-editor a{ color:var(--slate); }
+  .md mark, .rich-editor mark{ background:#f6e27a; color:#23303b; border-radius:2px; padding:0 1px; }
 
   .attach-list{ display:flex; flex-direction:column; gap:8px; margin-bottom:10px; }
   .attach-item{ display:flex; align-items:center; gap:10px; background:var(--surface); border:1px solid var(--paper-edge); border-radius:6px; padding:7px 9px; }
@@ -403,6 +415,9 @@ try{ var th = appStore.getItem('binder-theme'); if(th) document.documentElement.
   .md-btn{ font-family:'IBM Plex Mono',monospace; font-size:12px; min-width:30px; padding:4px 8px; border:1px solid var(--paper-edge); border-radius:5px; background:var(--surface); color:var(--ink); cursor:pointer; }
   .md-btn:hover{ border-color:var(--ink-soft); }
   .md-btn.active{ background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  .md-btn-hl{ background:#f6e27a; color:#23303b; }
+  .md-btn-hl.active{ outline:2px solid var(--ink); outline-offset:1px; background:#f6e27a; color:#23303b; }
+  .md-sep{ width:1px; align-self:stretch; background:var(--paper-edge); margin:0 4px; }
   .md-spacer{ flex:1; }
   .md-preview{ min-height:200px; background:var(--surface); border:1px solid var(--paper-edge); border-radius:6px; padding:12px 14px; font-size:14px; line-height:1.6; overflow-wrap:anywhere; }
   .md h1,.md h2,.md h3{ font-family:'Spectral',serif; margin:.7em 0 .3em 0; line-height:1.25; }
@@ -648,16 +663,16 @@ try{ var th = appStore.getItem('binder-theme'); if(th) document.documentElement.
       </div>
       <div class="editor-row">
         <div class="md-toolbar">
-          <button class="md-btn" data-md="bold" title="Bold"><b>B</b></button>
-          <button class="md-btn" data-md="italic" title="Italic"><i>I</i></button>
+          <button class="md-btn" data-md="bold" title="Bold (Ctrl+B): select some words, then press"><b>B</b> Bold</button>
+          <button class="md-btn" data-md="underline" title="Underline (Ctrl+U): select some words, then press"><u>U</u> Underline</button>
+          <button class="md-btn md-btn-hl" data-md="highlight" title="Highlight (Ctrl+Shift+H): select some words, then press">Highlight</button>
+          <button class="md-btn" data-md="italic" title="Italic (Ctrl+I)"><i>I</i></button>
+          <span class="md-sep"></span>
           <button class="md-btn" data-md="h2" title="Heading">H</button>
           <button class="md-btn" data-md="ul" title="Bullet list">• List</button>
           <button class="md-btn" data-md="ol" title="Numbered list">1. List</button>
-          <span class="md-spacer"></span>
-          <button class="md-btn" id="mdPreviewBtn" title="See the formatted note">Preview</button>
         </div>
-        <textarea id="editContent" lang="en-GB" spellcheck="true" placeholder="Write your notes… Use **bold**, *italic*, ## headings and - bullets"></textarea>
-        <div class="md-preview md" id="mdPreview" style="display:none;"></div>
+        <div id="editContent" class="rich-editor" contenteditable="true" role="textbox" aria-multiline="true" lang="en-GB" spellcheck="true" data-placeholder="Write your notes… To make words bold, underlined or highlighted, select them and press a button above."></div>
       </div>
 
       <div class="editor-extras">
@@ -1078,12 +1093,19 @@ function topicColor(topic, index){ return topic.color || COLORS[index % COLORS.l
 function escapeHtml(str){ const d = document.createElement('div'); d.textContent = str==null?'':str; return d.innerHTML; }
 
 // ---- lightweight Markdown (safe: escapes HTML first) ----
+// \* \` \= \+ \[ \] \\ mean the plain character (the note editor writes these so typed symbols never turn into formatting)
+const MD_ESC_RE = /\\([\\*`=+\[\]])/g;
 function mdInline(s){
-  return s
+  const kept = [];
+  s = s.replace(MD_ESC_RE, (m, c) => '\u0000' + (kept.push(c) - 1) + '\u0000');
+  s = s
     .replace(/`([^`]+)`/g, '<code>$1</code>')
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
     .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, '$1<em>$2</em>')
+    .replace(/\+\+(?=\S)(.+?)\+\+/g, '<u>$1</u>')
+    .replace(/==(?=\S)(.+?)==/g, '<mark>$1</mark>')
     .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)"]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  return s.replace(/\u0000(\d+)\u0000/g, (m, i) => kept[+i]);
 }
 function renderMarkdown(src){
   const lines = escapeHtml(src || '').split('\n');
@@ -1120,7 +1142,10 @@ function stripMarkdown(src){
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, '$1$2')
     .replace(/`([^`]+)`/g, '$1')
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
+    .replace(/\+\+(?=\S)(.+?)\+\+/g, '$1')
+    .replace(/==(?=\S)(.+?)==/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(MD_ESC_RE, '$1');
 }
 
 function daysUntil(dateStr){
@@ -1457,44 +1482,275 @@ function closeEditor(){
 
 function render(){ if(typeof renderCalendar === 'function') renderCalendar(); renderSpine(); renderTabs(); renderHeader(); renderSearchScope(); renderCards(); renderRelatedHost(); renderDeadlines(); renderSafetyBanner(); }
 
-// ---- note formatting toolbar ----
-let previewOn = false;
-function setPreview(on){
-  previewOn = on;
-  $('mdPreviewBtn').classList.toggle('active', on);
-  $('mdPreviewBtn').textContent = on ? 'Edit' : 'Preview';
-  if(on) $('mdPreview').innerHTML = renderMarkdown($('editContent').value) || '<p style="color:var(--ink-soft)">Nothing to preview yet.</p>';
-  $('mdPreview').style.display = on ? 'block' : 'none';
-  $('editContent').style.display = on ? 'none' : 'block';
-  document.querySelectorAll('.md-btn[data-md]').forEach(b => b.disabled = on);
+// ---- note editor: what you see is what you get, saved as Markdown ----
+// The note box shows real bold / underline / highlight. Notes are still stored as the same
+// Markdown text as before (**bold**, *italic*, ++underline++, ==highlight==, ## heading, - bullets),
+// so cards, search, print, flashcards and backups keep working unchanged.
+let previewOn = false;          // the old Preview button is gone; the note box is already formatted
+function setPreview(){}
+
+// stored Markdown -> editor HTML (one <div> per line, so lines round-trip exactly)
+function mdToEditorHtml(src){
+  const lines = escapeHtml(src || '').split('\n');
+  let html = '', list = null;
+  const closeList = () => { if(list){ html += `</${list}>`; list = null; } };
+  lines.forEach(line => {
+    let m;
+    if((m = line.match(/^(#{1,3})\s+(.*)$/))){
+      closeList(); html += `<h${m[1].length}>${mdInline(m[2]) || '<br>'}</h${m[1].length}>`;
+    } else if((m = line.match(/^\s*[-*•]\s+(.*)$/))){
+      if(list !== 'ul'){ closeList(); html += '<ul>'; list = 'ul'; }
+      html += `<li>${mdInline(m[1]) || '<br>'}</li>`;
+    } else if((m = line.match(/^\s*\d+[.)]\s+(.*)$/))){
+      if(list !== 'ol'){ closeList(); html += '<ol>'; list = 'ol'; }
+      html += `<li>${mdInline(m[1]) || '<br>'}</li>`;
+    } else {
+      closeList(); html += `<div>${mdInline(line) || '<br>'}</div>`;
+    }
+  });
+  closeList();
+  return html;
 }
-$('mdPreviewBtn').addEventListener('click', () => setPreview(!previewOn));
+
+// editor HTML -> Markdown
+const RICH_BLOCKS = /^(DIV|P|H1|H2|H3|H4|H5|H6|UL|OL|LI|BLOCKQUOTE|PRE|SECTION|ARTICLE|HEADER|FOOTER|TABLE|TR)$/;
+function mdEscapeText(t){
+  return t.replace(/ /g, ' ')
+    .replace(/\\(?=[\\*`=+\[\]])/g, '\\\\')
+    .replace(/[*`\[\]]/g, '\\$&')
+    .replace(/==/g, '=\\=')
+    .replace(/\+\+/g, '+\\+');
+}
+function mdWrap(mark, s){
+  return s.split('\n').map(part => {
+    if(!part.trim()) return part;
+    const lead = part.match(/^\s*/)[0], trail = part.match(/\s*$/)[0];
+    return lead + mark + part.trim() + mark + trail;
+  }).join('\n');
+}
+function richInline(node){
+  if(node.nodeType === 3) return mdEscapeText(node.nodeValue);
+  if(node.nodeType !== 1) return '';
+  const tag = node.tagName;
+  if(tag === 'BR') return '\n';
+  if(tag === 'CODE') return '`' + node.textContent.replace(/`/g, '') + '`';
+  let inner = '';
+  node.childNodes.forEach(c => {
+    const piece = richInline(c);
+    // a block inside an inline spot (e.g. a pasted <div> in a list item) starts a new line
+    if(c.nodeType === 1 && RICH_BLOCKS.test(c.tagName) && inner && !inner.endsWith('\n')) inner += '\n';
+    inner += piece;
+  });
+  if(tag === 'A'){
+    const href = node.getAttribute('href') || '';
+    return /^https?:\/\//i.test(href) && inner.trim() ? `[${inner}](${href})` : inner;
+  }
+  const st = node.style || {};
+  const weight = st.fontWeight;
+  if(tag === 'B' || tag === 'STRONG' || weight === 'bold' || +weight >= 600) inner = mdWrap('**', inner);
+  if(tag === 'I' || tag === 'EM' || st.fontStyle === 'italic') inner = mdWrap('*', inner);
+  if(tag === 'U' || /underline/.test(st.textDecoration || '') || /underline/.test(st.textDecorationLine || '')) inner = mdWrap('++', inner);
+  if(tag === 'MARK') inner = mdWrap('==', inner);
+  return inner;
+}
+function richLines(node){
+  let s = richInline(node);
+  if(s.endsWith('\n')) s = s.slice(0, -1);   // a trailing <br> only keeps an empty line open
+  return s.split('\n');
+}
+function richBlocks(container, out){
+  let buf = [];
+  const flush = () => {
+    if(!buf.length) return;
+    const span = document.createElement('span');
+    buf.forEach(n => span.appendChild(n.cloneNode(true)));
+    out.push(...richLines(span));
+    buf = [];
+  };
+  container.childNodes.forEach(node => {
+    if(node.nodeType !== 1 || !RICH_BLOCKS.test(node.tagName)){
+      if(node.nodeType === 1 && node.tagName === 'BR' && !buf.length){ out.push(''); return; }
+      buf.push(node);
+      if(node.nodeType === 1 && node.tagName === 'BR') flush();
+      return;
+    }
+    flush();
+    const tag = node.tagName;
+    if(/^H[1-6]$/.test(tag)){
+      const text = richLines(node).join(' ').trim();
+      out.push(text ? '#'.repeat(Math.min(3, +tag[1])) + ' ' + text : '');
+    } else if(tag === 'UL' || tag === 'OL'){
+      let n = 0;
+      node.childNodes.forEach(li => {
+        if(li.nodeType === 1 && (li.tagName === 'UL' || li.tagName === 'OL')){ richBlocks({ childNodes: [li] }, out); return; }
+        const text = richLines(li).join(' ').trim();
+        n++;
+        out.push((tag === 'UL' ? '- ' : n + '. ') + text);
+      });
+    } else if([...node.childNodes].some(c => c.nodeType === 1 && RICH_BLOCKS.test(c.tagName))){
+      richBlocks(node, out);
+      if(tag === 'P') out.push('');
+    } else {
+      out.push(...richLines(node));
+      if(tag === 'P') out.push('');
+    }
+  });
+  flush();
+}
+function editorToMarkdown(el){
+  const out = [];
+  richBlocks(el, out);
+  return out.map(l => l.replace(/[ \t]+$/, '')).join('\n').replace(/\n+$/, '');
+}
+
+const richEditor = $('editContent');
+Object.defineProperty(richEditor, 'value', {
+  get(){ return editorToMarkdown(richEditor); },
+  set(v){ richEditor.innerHTML = mdToEditorHtml(v); updateRichEmpty(); updateToolbarState(); }
+});
+function updateRichEmpty(){
+  richEditor.classList.toggle('is-empty', !richEditor.textContent.trim() && !richEditor.querySelector('li'));
+}
+try { document.execCommand('styleWithCSS', false, false); document.execCommand('defaultParagraphSeparator', false, 'div'); } catch(e){}
+
+function editorRange(){
+  const sel = window.getSelection();
+  if(!sel.rangeCount) return null;
+  const r = sel.getRangeAt(0);
+  return richEditor.contains(r.commonAncestorContainer) ? r : null;
+}
+function closestIn(node, tag){
+  while(node && node !== richEditor){
+    if(node.nodeType === 1 && node.tagName === tag) return node;
+    node = node.parentNode;
+  }
+  return null;
+}
+function unwrapEl(el){
+  const parent = el.parentNode;
+  while(el.firstChild) parent.insertBefore(el.firstChild, el);
+  parent.removeChild(el);
+}
+// Highlight: wrap each selected piece of text in <mark>; if it's all highlighted already, take it off.
+function toggleHighlight(){
+  const range = editorRange();
+  if(!range) return;
+  if(range.collapsed){
+    const m = closestIn(range.startContainer, 'MARK');
+    if(m) unwrapEl(m);
+    return;
+  }
+  const texts = [];
+  const walker = document.createTreeWalker(range.commonAncestorContainer.nodeType === 3 ? range.commonAncestorContainer.parentNode : range.commonAncestorContainer, NodeFilter.SHOW_TEXT);
+  while(walker.nextNode()){
+    const t = walker.currentNode;
+    if(range.intersectsNode(t) && t.nodeValue.length) texts.push(t);
+  }
+  const pieces = texts.map(t => {
+    const s = t === range.startContainer ? range.startOffset : 0;
+    const e = t === range.endContainer ? range.endOffset : t.nodeValue.length;
+    return { t, s, e };
+  }).filter(p => p.e > p.s);
+  if(!pieces.length) return;
+  const sel = window.getSelection();
+  if(pieces.every(p => closestIn(p.t, 'MARK'))){
+    new Set(pieces.map(p => closestIn(p.t, 'MARK'))).forEach(unwrapEl);
+    const first = pieces[0], last = pieces[pieces.length - 1];
+    const r = document.createRange();
+    r.setStart(first.t, first.s); r.setEnd(last.t, last.e);
+    sel.removeAllRanges(); sel.addRange(r);
+    return;
+  }
+  const made = [];
+  pieces.forEach(({ t, s, e }) => {
+    if(closestIn(t, 'MARK')){ made.push(t); return; }
+    let node = t;
+    if(s > 0) node = node.splitText(s);
+    if(e - s < node.nodeValue.length) node.splitText(e - s);
+    const mark = document.createElement('mark');
+    node.parentNode.insertBefore(mark, node);
+    mark.appendChild(node);
+    made.push(mark);
+  });
+  const r = document.createRange();
+  const firstT = made[0].nodeType === 3 ? made[0] : made[0].firstChild;
+  const lastM = made[made.length - 1], lastT = lastM.nodeType === 3 ? lastM : lastM.lastChild;
+  r.setStart(firstT, 0); r.setEnd(lastT, lastT.nodeValue.length);
+  sel.removeAllRanges(); sel.addRange(r);
+}
 
 function applyFormat(kind){
-  const ta = $('editContent');
-  const v = ta.value, a = ta.selectionStart, b = ta.selectionEnd;
-  if(kind === 'bold' || kind === 'italic'){
-    const mark = kind === 'bold' ? '**' : '*';
-    const sel = v.slice(a, b) || (kind === 'bold' ? 'bold text' : 'italic text');
-    ta.value = v.slice(0, a) + mark + sel + mark + v.slice(b);
-    ta.setSelectionRange(a + mark.length, a + mark.length + sel.length);
-  } else {
-    const start = v.lastIndexOf('\n', a - 1) + 1;
-    let end = v.indexOf('\n', b); if(end === -1) end = v.length;
-    const block = v.slice(start, end).split('\n').map((line, i) => {
-      const bare = line.replace(/^(#{1,3}\s+|\s*[-*•]\s+|\s*\d+[.)]\s+)/, '');
-      if(kind === 'h2') return '## ' + bare;
-      if(kind === 'ul') return '- ' + bare;
-      return (i + 1) + '. ' + bare;
-    }).join('\n');
-    ta.value = v.slice(0, start) + block + v.slice(end);
-    ta.setSelectionRange(start, start + block.length);
+  richEditor.focus();
+  if(!editorRange()){
+    // nothing selected in the note yet: put the cursor at the end
+    const r = document.createRange(); r.selectNodeContents(richEditor); r.collapse(false);
+    const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
   }
-  ta.dispatchEvent(new Event('input', { bubbles: true }));
-  ta.focus();
+  if(kind === 'bold') document.execCommand('bold');
+  else if(kind === 'italic') document.execCommand('italic');
+  else if(kind === 'underline') document.execCommand('underline');
+  else if(kind === 'highlight') toggleHighlight();
+  else if(kind === 'h2'){
+    const r = editorRange();
+    const inHeading = r && (closestIn(r.startContainer, 'H2') || closestIn(r.startContainer, 'H1') || closestIn(r.startContainer, 'H3'));
+    document.execCommand('formatBlock', false, inHeading ? 'div' : 'h2');
+  }
+  else if(kind === 'ul') document.execCommand('insertUnorderedList');
+  else if(kind === 'ol') document.execCommand('insertOrderedList');
+  updateRichEmpty();
+  updateToolbarState();
+  richEditor.dispatchEvent(new Event('input', { bubbles: true }));
 }
 document.querySelectorAll('.md-btn[data-md]').forEach(btn => {
+  btn.addEventListener('mousedown', e => e.preventDefault());   // keep the words selected
   btn.addEventListener('click', () => applyFormat(btn.getAttribute('data-md')));
+});
+
+// light up the buttons that apply where the cursor is
+function updateToolbarState(){
+  const r = editorRange();
+  const state = {};
+  if(r){
+    try {
+      state.bold = document.queryCommandState('bold');
+      state.italic = document.queryCommandState('italic');
+      state.underline = document.queryCommandState('underline');
+    } catch(e){}
+    state.highlight = !!closestIn(r.startContainer, 'MARK');
+    state.h2 = !!(closestIn(r.startContainer, 'H1') || closestIn(r.startContainer, 'H2') || closestIn(r.startContainer, 'H3'));
+    state.ul = !!closestIn(r.startContainer, 'UL');
+    state.ol = !!closestIn(r.startContainer, 'OL');
+  }
+  document.querySelectorAll('.md-btn[data-md]').forEach(b => b.classList.toggle('active', !!state[b.getAttribute('data-md')]));
+}
+document.addEventListener('selectionchange', updateToolbarState);
+
+richEditor.addEventListener('input', updateRichEmpty);
+richEditor.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if((e.ctrlKey || e.metaKey) && e.shiftKey && k === 'h'){ e.preventDefault(); applyFormat('highlight'); }
+  else if((e.ctrlKey || e.metaKey) && !e.shiftKey && k === 'u'){ e.preventDefault(); applyFormat('underline'); }
+  else if((e.ctrlKey || e.metaKey) && !e.shiftKey && k === 'b'){ e.preventDefault(); applyFormat('bold'); }
+  else if((e.ctrlKey || e.metaKey) && !e.shiftKey && k === 'i'){ e.preventDefault(); applyFormat('italic'); }
+});
+// pasting brings in plain text only, so odd fonts and colours from websites don't come along
+richEditor.addEventListener('paste', e => {
+  const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+  e.preventDefault();
+  document.execCommand('insertText', false, text);
+});
+richEditor.addEventListener('drop', e => {
+  const text = e.dataTransfer && e.dataTransfer.getData('text/plain');
+  if(text == null) return;
+  e.preventDefault();
+  const r = document.caretRangeFromPoint ? document.caretRangeFromPoint(e.clientX, e.clientY) : null;
+  if(r){ const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r); }
+  document.execCommand('insertText', false, text);
+});
+// links in a note open in a new tab with Ctrl/Cmd+click
+richEditor.addEventListener('click', e => {
+  const a = e.target.closest && e.target.closest('a');
+  if(a && (e.ctrlKey || e.metaKey)){ e.preventDefault(); window.open(a.href, '_blank', 'noopener'); }
 });
 
 // ---- deadlines ----
@@ -1688,14 +1944,14 @@ $('calToday').addEventListener('click', () => { const n = new Date(); calMonth =
 document.addEventListener('keydown', (e) => {
   if(!$('calOverlay').classList.contains('open')) return;
   if(e.key === 'Escape') closeCalendar();
-  if(e.target.closest && e.target.closest('input, select, textarea')) return;
+  if(e.target.closest && e.target.closest('input, select, textarea, [contenteditable="true"]')) return;
   if(e.key === 'ArrowLeft') $('calPrev').click();
   if(e.key === 'ArrowRight') $('calNext').click();
 });
 
 // ---- always run the latest version of the site ----
 // Bump APP_VERSION here AND in version.json every time the site is published.
-const APP_VERSION = '2026-09-28.6';
+const APP_VERSION = '2026-10-05.1';
 function busyForUpdate(){
   return $('overlay').classList.contains('open') || isListening || isSummarizing || autoWriting;
 }
@@ -2660,7 +2916,7 @@ $('flashMissedOnlyBtn').addEventListener('click', () => {
 document.addEventListener('keydown', (e) => {
   if(!$('flashOverlay').classList.contains('open')) return;
   if(e.key === 'Escape'){ $('flashCloseBtn').click(); return; }
-  if(e.target.closest && e.target.closest('input, textarea')) return;
+  if(e.target.closest && e.target.closest('input, textarea, [contenteditable="true"]')) return;
   if(e.key === ' '){ e.preventDefault(); flipFlash(); }
   else if(e.key === 'ArrowRight') stepFlash(1);
   else if(e.key === 'ArrowLeft') stepFlash(-1);
