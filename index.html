@@ -419,6 +419,22 @@ try{ var th = appStore.getItem('binder-theme'); if(th) document.documentElement.
   .md-btn-hl{ background:#f6e27a; color:#23303b; }
   .md-btn-hl.active{ outline:2px solid var(--ink); outline-offset:1px; background:#f6e27a; color:#23303b; }
   .md-sep{ width:1px; align-self:stretch; background:var(--paper-edge); margin:0 4px; }
+  .md-toolbar-title{ display:none; }
+  /* in the note: buttons sit in a side bar on the left that stays in view while you scroll */
+  .editor-write{ display:flex; align-items:flex-start; gap:12px; }
+  .editor-write .rich-editor{ flex:1; min-width:0; }
+  .editor-write .md-toolbar{ position:sticky; top:66px; z-index:1; flex-direction:column; align-items:stretch; flex-wrap:nowrap;
+    width:132px; flex-shrink:0; margin:0; padding:8px; gap:6px; background:var(--paper-card); border:1px solid var(--paper-edge); border-radius:8px; }
+  .editor-write .md-toolbar-title{ display:block; font-family:'IBM Plex Mono',monospace; font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-soft); text-align:center; }
+  .editor-write .md-btn{ text-align:left; padding:7px 9px; font-size:12.5px; white-space:nowrap; }
+  .editor-write .md-sep{ width:auto; height:1px; margin:2px 0; }
+  @media (max-width:640px){
+    /* phones: no room at the side, so the buttons stay stuck along the top instead */
+    .editor-write{ flex-direction:column; align-items:stretch; gap:6px; }
+    .editor-write .md-toolbar{ top:56px; width:auto; flex-direction:row; flex-wrap:wrap; padding:6px; }
+    .editor-write .md-toolbar-title, .editor-write .md-sep{ display:none; }
+    .editor-write .md-btn{ padding:6px 8px; }
+  }
   .md-spacer{ flex:1; }
   .md-preview{ min-height:200px; background:var(--surface); border:1px solid var(--paper-edge); border-radius:6px; padding:12px 14px; font-size:14px; line-height:1.6; overflow-wrap:anywhere; }
   .md h1,.md h2,.md h3{ font-family:'Spectral',serif; margin:.7em 0 .3em 0; line-height:1.25; }
@@ -662,8 +678,9 @@ try{ var th = appStore.getItem('binder-theme'); if(th) document.documentElement.
       <div class="editor-row">
         <input type="text" id="editTitle" placeholder="Note title" lang="en-GB" spellcheck="true">
       </div>
-      <div class="editor-row">
-        <div class="md-toolbar">
+      <div class="editor-row editor-write">
+        <div class="md-toolbar" role="toolbar" aria-label="Formatting">
+          <span class="md-toolbar-title">Format</span>
           <button class="md-btn" data-md="bold" title="Bold (Ctrl+B): select some words, then press"><b>B</b> Bold</button>
           <button class="md-btn" data-md="underline" title="Underline (Ctrl+U): select some words, then press"><u>U</u> Underline</button>
           <button class="md-btn md-btn-hl" data-md="highlight" title="Highlight (Ctrl+Shift+H): select some words, then press">Highlight</button>
@@ -673,7 +690,7 @@ try{ var th = appStore.getItem('binder-theme'); if(th) document.documentElement.
           <button class="md-btn" data-md="ul" title="Bullet list">• List</button>
           <button class="md-btn" data-md="ol" title="Numbered list">1. List</button>
         </div>
-        <div id="editContent" class="rich-editor" contenteditable="true" role="textbox" aria-multiline="true" lang="en-GB" spellcheck="true" data-placeholder="Write your notes… To make words bold, underlined or highlighted, select them and press a button above."></div>
+        <div id="editContent" class="rich-editor" contenteditable="true" role="textbox" aria-multiline="true" lang="en-GB" spellcheck="true" data-placeholder="Write your notes… To make words bold, underlined or highlighted, select them and press a button on the left."></div>
       </div>
 
       <div class="editor-extras">
@@ -1952,7 +1969,7 @@ document.addEventListener('keydown', (e) => {
 
 // ---- always run the latest version of the site ----
 // Bump APP_VERSION here AND in version.json every time the site is published.
-const APP_VERSION = '2026-10-05.2';
+const APP_VERSION = '2026-10-08.1';
 function busyForUpdate(){
   return $('overlay').classList.contains('open') || isListening || isSummarizing || autoWriting;
 }
