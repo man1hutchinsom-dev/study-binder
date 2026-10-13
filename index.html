@@ -52,7 +52,8 @@
     return r;
   }
   window.SB_DESKTOP = {
-    info: D.info, notice: D.notice, api: api,
+    info: D.info, notice: D.notice, api: api, token: D.token,
+    features: Array.isArray(D.features) ? D.features : [],
     // Last-moment save while the window is closing (normal saves aren't allowed then).
     beacon: function(key, value){
       value = String(value);
@@ -296,6 +297,13 @@ try{ var th = appStore.getItem('binder-theme'); if(th) document.documentElement.
   .attach-item a:hover{ text-decoration:underline; }
   .attach-remove{ background:none; border:none; color:var(--ink-soft); cursor:pointer; font-size:14px; flex-shrink:0; }
   .attach-remove:hover{ color:var(--danger); }
+  .attach-item a.attach-file{ cursor:pointer; }
+  .attach-item .attach-size{ font-size:11px; color:var(--ink-soft); flex-shrink:0; }
+  .attach-item .attach-folder{ background:none; border:none; cursor:pointer; font-size:13px; flex-shrink:0; opacity:.7; }
+  .attach-item .attach-folder:hover{ opacity:1; }
+  .attach-file-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px; padding:8px; border:1px dashed var(--paper-edge); border-radius:6px; }
+  .attach-file-row.drag{ border-color:var(--slate); background:var(--surface); }
+  .attach-hint{ font-size:12px; color:var(--ink-soft); }
   .attach-add{ display:flex; gap:8px; }
   .attach-add input{ font-family:'Inter',sans-serif; font-size:12.5px; padding:7px 9px; border:1px solid var(--paper-edge); border-radius:5px; background:var(--surface); color:var(--ink); }
   .attach-add input[name=url]{ flex:2; }
@@ -701,12 +709,17 @@ try{ var th = appStore.getItem('binder-theme'); if(th) document.documentElement.
       <div class="editor-extras">
         <h4 class="extras-title">References and extras</h4>
         <div class="editor-row">
-          <label>Attachments (image or file links)</label>
+          <label>Attachments (files and links)</label>
           <div class="attach-list" id="attachList"></div>
+          <div class="attach-file-row" id="attachDrop">
+            <button type="button" class="btn btn-ghost" id="attachFileBtn">📎 Add a file</button>
+            <span class="attach-hint">Slides, Word documents, PDFs, pictures… or drag a file here.</span>
+            <input type="file" id="attachFileInput" multiple hidden>
+          </div>
           <div class="attach-add">
             <input type="text" name="url" id="attachUrl" placeholder="https://…">
             <input type="text" name="label" id="attachLabel" placeholder="Label (optional)">
-            <button id="attachAddBtn">Add</button>
+            <button id="attachAddBtn">Add link</button>
           </div>
         </div>
         <div class="editor-row editor-voice-row" id="editorVoiceRow">
@@ -896,8 +909,12 @@ function sanitizeBinder(obj){
       updatedAt: Number.isFinite(n.updatedAt) ? n.updatedAt : Date.now(),
       ...(Number.isFinite(n.createdAt) ? { createdAt: n.createdAt } : {}),
       attachments: (Array.isArray(n.attachments) ? n.attachments : [])
-        .filter(a => a && typeof a === 'object' && isSafeUrl(a.url))
-        .map(a => ({ id: str(a.id, 40) || uid(), url: str(a.url, 2000), label: str(a.label, 200) })),
+        .filter(a => a && typeof a === 'object' && (isSafeUrl(a.url) || isFileAttachment(a)))
+        .map(a => isFileAttachment(a)
+          ? { id: str(a.id, 40) || uid(), url: '', label: str(a.label, 200),
+              file: { id: a.file.id, name: str(a.file.name, 200) || 'file', size: Number.isFinite(a.file.size) ? a.file.size : 0,
+                      type: str(a.file.type, 100), where: a.file.where === 'app' ? 'app' : 'browser' } }
+          : { id: str(a.id, 40) || uid(), url: str(a.url, 2000), label: str(a.label, 200) }),
       relatedReading: (Array.isArray(n.relatedReading) ? n.relatedReading : [])
         .filter(r => r && typeof r === 'object')
         .map(r => ({ label: str(r.label, 200), query: str(r.query, 300), stance: str(r.stance, 20), note: str(r.note, 500) }))
@@ -907,12 +924,15 @@ function sanitizeBinder(obj){
 }
 
 function isSafeUrl(u){ return typeof u === 'string' && /^https?:\/\//i.test(u.trim()); }
+// A file added to a note (slides, Word document...). The note keeps its name; the file itself is kept
+// in the app's "files" folder (where:'app') or in this browser's file storage (where:'browser').
+function isFileAttachment(a){ return !!(a && a.file && typeof a.file === 'object' && /^[a-z0-9]{6,40}$/.test(a.file.id || '')); }
 
 function starterBinder(){
   const t1 = { id: uid(), name: 'Getting started', color: COLORS[0], dueDate: null, deadlines: [], flashcards: [] };
   return { topics: [t1], notes: [{
     id: uid(), topicId: t1.id, title: 'How this binder works',
-    content: 'Each coloured tab is a topic. Click the pencil next to a topic\'s name to rename it, pick a colour or set a due date. Add attachments (image or file links) from inside a note. Use search to find a word anywhere — toggle between searching just this topic or everything. The Voice notes panel on the right can record and transcribe, then summarise it at your chosen depth. Try the flashcards (🗂) and print (🖨) buttons up top, and back up your binder any time from the top left.',
+    content: 'Each coloured tab is a topic. Click the pencil next to a topic\'s name to rename it, pick a colour or set a due date. Add files (slides, Word documents, PDFs) or web links from inside a note. Use search to find a word anywhere — toggle between searching just this topic or everything. The Voice notes panel on the right can record and transcribe, then summarise it at your chosen depth. Try the flashcards (🗂) and print (🖨) buttons up top, and back up your binder any time from the top left.',
     updatedAt: Date.now(), attachments: [], relatedReading: []
   }]};
 }
@@ -1456,18 +1476,34 @@ function renderAttachList(){
   pendingAttachments.forEach(att => {
     const row = document.createElement('div');
     row.className = 'attach-item';
-    const isImg = IMG_RE.test(att.url);
-    row.innerHTML = `
-      ${isImg ? `<img src="${escapeHtml(att.url)}" alt="">` : `<span class="attach-icon">📄</span>`}
-      <a href="${escapeHtml(att.url)}" target="_blank" rel="noopener">${escapeHtml(att.label || att.url)}</a>
-      <button class="attach-remove" data-id="${att.id}" title="Remove">✕</button>
-    `;
+    if(isFileAttachment(att)){
+      const f = att.file;
+      const inApp = f.where === 'app' && desktopFiles();
+      row.innerHTML = `
+        <span class="attach-icon">${fileIcon(f.name)}</span>
+        <a href="#" class="attach-file" title="Click to open">${escapeHtml(att.label || f.name)}</a>
+        <span class="attach-size">${escapeHtml(fileSizeText(f.size))}</span>
+        ${inApp ? `<button class="attach-folder" title="Show in folder">📂</button>` : ''}
+        <button class="attach-remove" data-id="${att.id}" title="Remove from this note">✕</button>
+      `;
+      row.querySelector('.attach-file').addEventListener('click', (e) => { e.preventDefault(); openFileAttachment(att); });
+      const fb = row.querySelector('.attach-folder');
+      if(fb) fb.addEventListener('click', () => desktopCall('/api/file-show', { id: f.id }));
+    } else {
+      const isImg = IMG_RE.test(att.url);
+      row.innerHTML = `
+        ${isImg ? `<img src="${escapeHtml(att.url)}" alt="">` : `<span class="attach-icon">🔗</span>`}
+        <a href="${escapeHtml(att.url)}" target="_blank" rel="noopener">${escapeHtml(att.label || att.url)}</a>
+        <button class="attach-remove" data-id="${att.id}" title="Remove">✕</button>
+      `;
+    }
     listEl.appendChild(row);
   });
   listEl.querySelectorAll('.attach-remove').forEach(btn => {
     btn.addEventListener('click', () => {
       pendingAttachments = pendingAttachments.filter(a => a.id !== btn.getAttribute('data-id'));
       renderAttachList();
+      scheduleAutoSave();
     });
   });
 }
@@ -1974,7 +2010,7 @@ document.addEventListener('keydown', (e) => {
 
 // ---- always run the latest version of the site ----
 // Bump APP_VERSION here AND in version.json every time the site is published.
-const APP_VERSION = '2026-10-13.1';
+const APP_VERSION = '2026-10-13.2';
 function busyForUpdate(){
   return $('overlay').classList.contains('open') || isListening || isSummarizing || autoWriting;
 }
@@ -2108,7 +2144,142 @@ $('attachAddBtn').addEventListener('click', () => {
   pendingAttachments.push({ id: uid(), url: finalUrl, label });
   $('attachUrl').value = ''; $('attachLabel').value = '';
   renderAttachList();
+  scheduleAutoSave();
 });
+
+// ---- files added to notes ----
+// In the desktop app the file is copied into Documents\Study Binder\files and opens in its own
+// program (PowerPoint, Word...). On the website it is kept in this browser's file storage (IndexedDB).
+function desktopFiles(){ return !!(SB_DESKTOP && SB_DESKTOP.features && SB_DESKTOP.features.indexOf('files') >= 0); }
+function fileIcon(name){
+  const ext = (String(name).match(/\.([a-z0-9]+)$/i) || [,''])[1].toLowerCase();
+  if(/^(ppt|pptx|pps|ppsx|key|odp)$/.test(ext)) return '📊';
+  if(/^(doc|docx|odt|rtf|pages|txt)$/.test(ext)) return '📝';
+  if(ext === 'pdf') return '📕';
+  if(/^(xls|xlsx|csv|ods|numbers)$/.test(ext)) return '📈';
+  if(/^(png|jpe?g|gif|webp|svg|heic|bmp)$/.test(ext)) return '🖼';
+  if(/^(mp3|m4a|wav|ogg|mp4|mov|webm)$/.test(ext)) return '🎞';
+  return '📄';
+}
+function fileSizeText(n){
+  if(!n) return '';
+  if(n < 1024 * 1024) return Math.max(1, Math.round(n / 1024)) + ' KB';
+  return (n / 1024 / 1024).toFixed(n < 10 * 1024 * 1024 ? 1 : 0) + ' MB';
+}
+const fileDB = {
+  db: null,
+  open(){
+    if(this.db) return Promise.resolve(this.db);
+    return new Promise((resolve, reject) => {
+      let req;
+      try{ req = indexedDB.open('study-binder-files', 1); }catch(e){ reject(e); return; }
+      req.onupgradeneeded = () => req.result.createObjectStore('files', { keyPath: 'id' });
+      req.onsuccess = () => { this.db = req.result; resolve(this.db); };
+      req.onerror = () => reject(req.error || new Error('file storage blocked'));
+    });
+  },
+  async run(mode, fn){
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('files', mode);
+      const req = fn(tx.objectStore('files'));
+      tx.oncomplete = () => resolve(req && req.result);
+      tx.onerror = tx.onabort = () => reject(tx.error || new Error('file storage failed'));
+    });
+  },
+  put(rec){ return this.run('readwrite', s => s.put(rec)); },
+  get(id){ return this.run('readonly', s => s.get(id)); }
+};
+async function saveFileToApp(id, file){
+  const res = await fetch('/api/file-save?id=' + encodeURIComponent(id) + '&name=' + encodeURIComponent(file.name), {
+    method: 'POST', headers: { 'X-SB-Token': SB_DESKTOP.token, 'Content-Type': 'application/octet-stream' }, body: file
+  });
+  let r = null; try{ r = await res.json(); }catch(e){}
+  if(!res.ok || !r || !r.ok) throw new Error((r && r.error) || 'Study Binder app not responding');
+}
+async function addFilesToNote(files){
+  if(!editingNoteId || !files || !files.length) return;
+  const noteId = editingNoteId;
+  for(const file of Array.from(files)){
+    const id = uid() + uid();
+    setStatus('Adding ' + file.name + '…');
+    let where = 'browser';
+    try{
+      if(desktopFiles()){ await saveFileToApp(id, file); where = 'app'; }
+      else await fileDB.put({ id, name: file.name, type: file.type, size: file.size, blob: file, addedAt: Date.now() });
+    }catch(e){
+      alert('"' + file.name + '" couldn\'t be added.\n\n' + (e && e.message ? e.message : e) +
+        (SB_DESKTOP ? '' : '\n\nVery big files work best in the Study Binder app on your computer.'));
+      continue;
+    }
+    if(editingNoteId !== noteId) return;   // the note was closed meanwhile
+    pendingAttachments.push({ id: uid(), url: '', label: '', file: { id, name: file.name, size: file.size, type: file.type || '', where } });
+    renderAttachList();
+    scheduleAutoSave();
+    setStatus('Added ' + file.name);
+  }
+}
+async function openFileAttachment(att){
+  const f = att.file;
+  try{
+    if(f.where === 'app'){
+      if(!desktopFiles()){ alert('"' + f.name + '" is kept in the Study Binder app on your computer. Open the app to see it.'); return; }
+      await SB_DESKTOP.api('/api/file-open', { id: f.id });
+      setStatus('Opening ' + f.name + '…');
+      return;
+    }
+    const rec = await fileDB.get(f.id);
+    if(!rec || !rec.blob){
+      alert('"' + f.name + '" isn\'t saved in this browser.\n\nFiles added on the website stay in the browser they were added in. Please add it again.');
+      return;
+    }
+    const blob = rec.blob.type ? rec.blob : new Blob([rec.blob], { type: f.type || 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const showable = /^(application\/pdf|image\/|text\/plain|audio\/|video\/)/.test(blob.type);
+    if(showable && window.open(url, '_blank')){ /* opened in a new tab */ }
+    else {
+      const a = document.createElement('a');
+      a.href = url; a.download = f.name;
+      document.body.appendChild(a); a.click(); a.remove();
+      setStatus('Downloaded ' + f.name + ' — open it from your Downloads');
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }catch(e){
+    alert('"' + f.name + '" couldn\'t be opened.\n\n' + (e && e.message ? e.message : e));
+  }
+}
+// Files added before the app could keep them in its folder: copy them in (the browser copy is kept too).
+async function moveBrowserFilesToApp(){
+  if(!desktopFiles() || typeof indexedDB === 'undefined') return;
+  let moved = 0;
+  for(const n of data.notes){
+    for(const a of (n.attachments || [])){
+      if(!isFileAttachment(a) || a.file.where !== 'browser') continue;
+      try{
+        const rec = await fileDB.get(a.file.id);
+        if(!rec || !rec.blob) continue;
+        await saveFileToApp(a.file.id, new File([rec.blob], a.file.name));
+        a.file.where = 'app';
+        pendingAttachments.forEach(p => { if(p.file && p.file.id === a.file.id) p.file.where = 'app'; });
+        moved++;
+      }catch(e){}
+    }
+  }
+  if(moved){ mergeExternalChanges(); saveData(); if(editingNoteId) renderAttachList(); }
+}
+$('attachFileBtn').addEventListener('click', () => $('attachFileInput').click());
+$('attachFileInput').addEventListener('change', (e) => { const fl = Array.from(e.target.files || []); e.target.value = ''; addFilesToNote(fl); });
+(function(){
+  const drop = $('attachDrop');
+  drop.addEventListener('dragover', (e) => { if(e.dataTransfer && Array.from(e.dataTransfer.types || []).indexOf('Files') >= 0){ e.preventDefault(); drop.classList.add('drag'); } });
+  drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
+  drop.addEventListener('drop', (e) => {
+    drop.classList.remove('drag');
+    if(!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return;
+    e.preventDefault();
+    addFilesToNote(e.dataTransfer.files);
+  });
+})();
 
 // ---- voice capture ----
 // ---- voice sidebar ----
@@ -3107,7 +3278,7 @@ function preparePrintArea(topic){
       <div class="print-note">
         <h2>${escapeHtml(n.title || 'Untitled')}</h2>
         <div class="print-content md">${renderMarkdown(n.content || '')}</div>
-        ${n.attachments && n.attachments.length ? `<div class="print-attachments"><strong>Attachments:</strong><ul>${n.attachments.map(a => `<li>${escapeHtml(a.label || a.url)} — ${escapeHtml(a.url)}</li>`).join('')}</ul></div>` : ''}
+        ${n.attachments && n.attachments.length ? `<div class="print-attachments"><strong>Attachments:</strong><ul>${n.attachments.map(a => isFileAttachment(a) ? `<li>${escapeHtml(a.label || a.file.name)} (file)</li>` : `<li>${escapeHtml(a.label || a.url)} — ${escapeHtml(a.url)}</li>`).join('')}</ul></div>` : ''}
       </div>
     `).join('')}
   `;
@@ -3140,7 +3311,7 @@ function mergeExternalChanges(){
     if(fresh){
       data = fresh;
       const existing = mine && data.notes.find(n => n.id === mine.id);
-      if(existing){ Object.assign(existing, { title: mine.title, content: mine.content, updatedAt: mine.updatedAt }); }
+      if(existing){ Object.assign(existing, { title: mine.title, content: mine.content, attachments: mine.attachments, updatedAt: mine.updatedAt }); }
       else if(mine){
         if(!data.topics.find(t => t.id === mine.topicId) && data.topics.length) mine.topicId = data.topics[0].id;
         data.notes.push(mine);
@@ -3158,6 +3329,7 @@ function scheduleAutoSave(){
   if(!note) return;
   note.title = $('editTitle').value;
   note.content = $('editContent').value;
+  note.attachments = pendingAttachments.slice();
   note.updatedAt = Date.now();
   clearTimeout(autoSaveTimer);
   autoSaveTimer = setTimeout(() => { autoSaveTimer = null; mergeExternalChanges(); saveData(); }, 800);
@@ -3235,6 +3407,7 @@ $('searchInput').addEventListener('input', (e) => {
   initAutoBackup();
   findWebsiteBackups();
   checkForUpdate();
+  moveBrowserFilesToApp();
   // ask the browser not to clear this site's storage when disk space runs low
   try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}
   if(liveTranscript.trim() || currentSummary) setVoiceStatus('Restored your last recording.');

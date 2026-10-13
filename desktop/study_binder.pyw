@@ -6,6 +6,7 @@ Study Binder page in its own window and saves every change to real files:
     Documents\\Study Binder\\study-binder.json      your topics and notes
     Documents\\Study Binder\\voice-notes.json       the last voice recording
     Documents\\Study Binder\\backups\\               automatic dated copies
+    Documents\\Study Binder\\files\\                 files added to notes (slides, Word documents...)
 
 Program files, settings (theme, Google API key) and the downloaded app page live
 in %LOCALAPPDATA%\\Study Binder. Only the Python standard library is used.
@@ -36,6 +37,8 @@ UPDATE_BASE = os.environ.get('SB_UPDATE_URL', 'https://man1hutchinsom-dev.github
 IDLE_SECONDS = int(os.environ.get('SB_IDLE_SECONDS', '600'))   # quit this long after the window closes
 UPDATE_EVERY = int(os.environ.get('SB_UPDATE_EVERY', '300'))            # seconds between update checks
 MAX_BODY = 60 * 1024 * 1024
+MAX_FILE = 500 * 1024 * 1024   # largest file that can be added to a note
+FILE_ID_RE = re.compile(r'^[a-z0-9]{6,40}$')
 IS_WINDOWS = os.name == 'nt'
 HERE = Path(__file__).resolve().parent
 
@@ -220,11 +223,64 @@ class Store:
     def backup_dir(self):
         return self.data_dir / 'backups'
 
+    @property
+    def files_dir(self):
+        return self.data_dir / 'files'
+
+    # -- files added to notes: files\<id>-<name>
+    def find_file(self, file_id):
+        if not FILE_ID_RE.match(str(file_id or '')):
+            raise ValueError('unknown file')
+        try:
+            for p in self.files_dir.iterdir():
+                if p.is_file() and p.name.startswith(file_id + '-'):
+                    return p
+        except FileNotFoundError:
+            pass
+        return None
+
+    def save_file(self, file_id, name, stream, size):
+        if not FILE_ID_RE.match(str(file_id or '')):
+            raise ValueError('unknown file')
+        if size > MAX_FILE:
+            raise ValueError('That file is too big (over 500 MB).')
+        name = re.sub(r'[\\/:*?"<>|\x00-\x1f]', '_', str(name or 'file')).strip(' .') or 'file'
+        stem, dot, ext = name.rpartition('.')
+        if dot and len(ext) <= 10:
+            name = stem[:100] + '.' + ext
+        else:
+            name = name[:100]
+        self.files_dir.mkdir(parents=True, exist_ok=True)
+        target = self.files_dir / (file_id + '-' + name)
+        tmp = self.files_dir / ('.' + file_id + '.' + str(os.getpid()) + '.tmp')
+        left = size
+        with open(tmp, 'wb') as f:
+            while left > 0:
+                chunk = stream.read(min(left, 1024 * 1024))
+                if not chunk:
+                    break
+                f.write(chunk)
+                left -= len(chunk)
+            f.flush()
+            os.fsync(f.fileno())
+        if left:
+            tmp.unlink()
+            raise IOError('the file did not arrive in full')
+        old = self.find_file(file_id)
+        os.replace(tmp, target)
+        if old and old != target:
+            try:
+                old.unlink()
+            except Exception:
+                pass
+        log('file added', target.name)
+        return target
+
     # -- loading
     def load(self):
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.backup_dir.mkdir(parents=True, exist_ok=True)
-        for tmp in self.data_dir.glob('.*.tmp'):   # left over from a save that was cut off; the real file is untouched
+        for tmp in list(self.data_dir.glob('.*.tmp')) + list(self.files_dir.glob('.*.tmp')):   # left over from a save that was cut off; the real file is untouched
             try:
                 tmp.unlink()
             except Exception:
@@ -592,7 +648,7 @@ class App:
             store = dict(self.store.values)
             rev = self.store.rev
         return {'token': self.token, 'rev': rev, 'store': store, 'notice': self.store.notice,
-                'info': self.info(), 'version': self.page.version}
+                'info': self.info(), 'version': self.page.version, 'features': ['files']}
 
     def render_page(self):
         payload = json.dumps(self.boot_payload(), ensure_ascii=False)
@@ -671,6 +727,11 @@ def make_handler(app):
                 return self.send(200, {'ok': True, 'rev': rev, 'changed': changed})
             if url.path == '/api/info':
                 return self.send(200, {'ok': True, 'info': app.info()})
+            if url.path == '/api/file':
+                p = app.store.find_file((q.get('id') or [''])[0])
+                if not p:
+                    return self.send(404, {'ok': False, 'error': 'file not found'})
+                return self.send(200, p.read_bytes(), 'application/octet-stream')
             if url.path == '/api/found-backups':
                 if app.found_cache is None:
                     app.found_cache = find_old_backups(app.store)
@@ -689,8 +750,12 @@ def make_handler(app):
                 return self.send(403, {'ok': False, 'error': 'not allowed'})
             app.last_seen = time.time()
             try:
-                body = self.read_body()
                 s = app.store
+                if url.path == '/api/file-save':   # the file itself is the body, not JSON
+                    s.save_file((q.get('id') or [''])[0], (q.get('name') or [''])[0],
+                                self.rfile, int(self.headers.get('Content-Length') or 0))
+                    return self.send(200, {'ok': True})
+                body = self.read_body()
                 if url.path == '/api/set':
                     rev = s.set(body.get('key'), body.get('value'), str(body.get('client', '')))
                     return self.send(200, {'ok': True, 'rev': rev})
@@ -700,6 +765,19 @@ def make_handler(app):
                 if url.path == '/api/open-folder':
                     folder = s.backup_dir if body.get('which') == 'backups' else s.data_dir
                     open_folder(folder)
+                    return self.send(200, {'ok': True})
+                if url.path == '/api/file-open':
+                    p = s.find_file(body.get('id'))
+                    if not p:
+                        raise ValueError('That file is no longer in the files folder.')
+                    open_file(p)
+                    return self.send(200, {'ok': True})
+                if url.path == '/api/file-show':
+                    p = s.find_file(body.get('id'))
+                    if p and IS_WINDOWS:
+                        subprocess.Popen(['explorer', '/select,', str(p)])
+                    else:
+                        open_folder(s.files_dir)
                     return self.send(200, {'ok': True})
                 if url.path == '/api/backup-now':
                     text = s.values.get(MAIN_KEY)
@@ -756,6 +834,18 @@ def open_folder(folder):
         subprocess.Popen(['open', str(folder)])
     else:
         subprocess.Popen(['xdg-open', str(folder)])
+
+
+def open_file(path):
+    """Open a file in its usual program (PowerPoint, Word, a PDF reader...)."""
+    if IS_WINDOWS:
+        os.startfile(str(path))
+    elif sys.platform == 'darwin':
+        subprocess.Popen(['open', str(path)])
+    elif os.environ.get('SB_NO_WINDOW'):
+        log('would open', path)
+    else:
+        subprocess.Popen(['xdg-open', str(path)])
 
 
 # ---------------------------------------------------------------- window
