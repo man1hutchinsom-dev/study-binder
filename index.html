@@ -334,6 +334,10 @@ try{ var th = appStore.getItem('binder-theme'); if(th) document.documentElement.
     border-radius:6px; padding:9px 10px; min-height:160px; max-height:280px; overflow-y:auto; line-height:1.5; white-space:pre-wrap;
   }
   .transcript-box.empty-hint{ color:var(--ink-soft); font-style:italic; }
+  textarea.transcript-box{ display:block; width:100%; box-sizing:border-box; border:1px solid transparent; font-family:inherit; resize:vertical; outline:none; }
+  textarea.transcript-box:focus{ border-color:var(--ink-soft); }
+  textarea.transcript-box::placeholder{ color:var(--ink-soft); font-style:italic; }
+  .voice-hearing{ font-size:12px; color:var(--ink-soft); font-style:italic; margin-top:4px; min-height:0; }
 
   .summary-options{ display:flex; gap:6px; margin-top:14px; }
   .summary-btn{
@@ -648,8 +652,9 @@ try{ var th = appStore.getItem('binder-theme'); if(th) document.documentElement.
 
     <div class="voice-columns">
       <div class="voice-col">
-        <div class="voice-col-label">Transcript</div>
-        <div class="transcript-box empty-hint" id="voiceLive">Nothing recorded yet — press start and begin speaking.</div>
+        <div class="voice-col-label">Transcript · editable</div>
+        <textarea class="transcript-box" id="voiceLive" spellcheck="true" placeholder="Nothing recorded yet — press start and begin speaking. You can click here to fix any words, even while listening."></textarea>
+        <div class="voice-hearing" id="voiceHearing"></div>
       </div>
       <div class="voice-col">
         <div class="voice-col-label">Summary</div>
@@ -1969,7 +1974,7 @@ document.addEventListener('keydown', (e) => {
 
 // ---- always run the latest version of the site ----
 // Bump APP_VERSION here AND in version.json every time the site is published.
-const APP_VERSION = '2026-10-08.1';
+const APP_VERSION = '2026-10-13.1';
 function busyForUpdate(){
   return $('overlay').classList.contains('open') || isListening || isSummarizing || autoWriting;
 }
@@ -2136,6 +2141,19 @@ function loadVoice(){
   }catch(e){}
 }
 
+function appendTranscript(text){
+  text = text.trim();
+  if(!text) return;
+  if(liveTranscript && !/\s$/.test(liveTranscript)) liveTranscript += ' ';
+  liveTranscript += text + ' ';
+  saveVoice();
+}
+$('voiceLive').addEventListener('input', () => {
+  liveTranscript = $('voiceLive').value;
+  saveVoice();
+  renderSidebar();
+});
+
 function setVoiceStatus(text){ $('voiceStatus').textContent = text; $('editorVoiceStatus').textContent = text; }
 $('editorMicBtn').addEventListener('click', () => $('micBtn').click());
 
@@ -2145,15 +2163,20 @@ function renderSidebar(){
   $('micBtn').classList.toggle('listening', isListening);
   $('micBtnText').textContent = isListening ? '⏹ Stop listening' : '🎙 Start listening';
 
+  // The transcript box is editable. liveTranscript always matches what is in
+  // it; new words are added at the end without moving the cursor, so fixes
+  // typed while listening are never overwritten.
   const box = $('voiceLive');
-  const display = liveTranscript + interimText;
-  if(display.trim()){
-    box.textContent = display;
-    box.classList.remove('empty-hint');
-  } else {
-    box.textContent = 'Nothing recorded yet — press start and begin speaking.';
-    box.classList.add('empty-hint');
+  if(box.value !== liveTranscript){
+    const focused = document.activeElement === box;
+    if(focused && liveTranscript.startsWith(box.value)){
+      box.setRangeText(liveTranscript.slice(box.value.length), box.value.length, box.value.length, 'preserve');
+    } else {
+      box.value = liveTranscript;
+    }
+    if(!focused) box.scrollTop = box.scrollHeight;
   }
+  $('voiceHearing').textContent = interimText.trim() ? 'Hearing: ' + interimText.trim() + '…' : '';
 
   const labels = { quick: 'Quick brief', normal: 'Normal', detailed: 'Detailed' };
   ['quick','normal','detailed'].forEach(level => {
@@ -2211,7 +2234,7 @@ function stopListening(){
   setTimeout(() => {
     if(recognition === r && !isListening && recActive){
       recActive = false; recognition = null;
-      if(interimText.trim()){ liveTranscript += interimText.trim() + ' '; saveVoice(); }
+      if(interimText.trim()) appendTranscript(interimText);
       interimText = '';
       renderSidebar();
     }
@@ -2241,12 +2264,11 @@ function startRecognitionSession(){
     interimText = '';
     for(let i = event.resultIndex; i < event.results.length; i++){
       const chunk = event.results[i][0].transcript;
-      if(event.results[i].isFinal){ liveTranscript += chunk.trim() + ' '; saveVoice(); }
+      if(event.results[i].isFinal){ appendTranscript(chunk); }
       else{ interimText += chunk; }
     }
     restartFails = 0;
     renderSidebar();
-    const box = $('voiceLive'); box.scrollTop = box.scrollHeight;
   };
   r.onerror = (event) => {
     if(r !== recognition) return;
@@ -2266,7 +2288,7 @@ function startRecognitionSession(){
     if(r !== recognition) return;
     recActive = false;
     // words that were still being worked out when the session ended
-    if(interimText.trim()){ liveTranscript += interimText.trim() + ' '; saveVoice(); }
+    if(interimText.trim()) appendTranscript(interimText);
     interimText = '';
     if(!isListening){ renderSidebar(); return; }
     if(Date.now() - lastStartAt < 1500) restartFails++; else restartFails = 0;
