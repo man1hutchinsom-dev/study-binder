@@ -533,6 +533,49 @@ try{ var th = appStore.getItem('binder-theme'); if(th) document.documentElement.
   .cal-panel .existing{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; width:100%; }
   .cal-panel input[type=text]{ font-family:'Inter',sans-serif; font-size:13px; padding:6px 8px; border:1px solid var(--paper-edge); border-radius:6px; background:var(--surface); color:var(--ink); min-width:200px; flex:1; }
   .cal-panel .dl-line{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; width:100%; }
+  /* ---- timetable: notes filed by week and topic ---- */
+  #ttOverlay{ padding:0; z-index:25; background:var(--paper); }
+  .tt-page{ width:100%; min-height:100vh; }
+  .tt-title{ font-family:'Spectral',serif; font-size:22px; margin:0; font-weight:700; }
+  .tt-inner{ max-width:1400px; margin:0 auto; padding:16px 24px 50px 24px; }
+  .tt-controls{ display:flex; flex-wrap:wrap; gap:10px 18px; align-items:center; margin-bottom:14px; font-size:13.5px; }
+  .tt-controls label{ display:flex; align-items:center; gap:6px; color:var(--ink-soft); }
+  .tt-controls select, .tt-controls input[type=date], .editor-week select{ font-family:'Inter',sans-serif; font-size:13px; padding:6px 8px; border:1px solid var(--paper-edge); border-radius:6px; background:var(--surface); color:var(--ink); }
+  .tt-help{ font-size:12.5px; color:var(--ink-soft); margin:0 0 12px 0; }
+  .tt-scroll{ overflow-x:auto; border:1px solid var(--paper-edge); border-radius:10px; background:var(--paper-edge); }
+  .tt-grid{ display:grid; gap:1px; min-width:fit-content; }
+  .tt-head, .tt-week, .tt-cell{ background:var(--paper-card); padding:8px; min-width:0; }
+  .tt-head{ font-family:'IBM Plex Mono',monospace; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink); font-weight:600;
+    position:sticky; top:0; z-index:1; border-top:4px solid var(--tt-colour, var(--paper-edge)); cursor:pointer; }
+  .tt-head.corner{ border-top-color:transparent; cursor:default; left:0; z-index:2; }
+  .tt-week{ position:sticky; left:0; z-index:1; font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink); font-weight:600; cursor:pointer; }
+  .tt-week small{ display:block; font-weight:400; color:var(--ink-soft); font-size:10.5px; margin-top:2px; }
+  .tt-week.now{ background:var(--ink); color:var(--paper); }
+  .tt-week.now small{ color:var(--paper); opacity:.8; }
+  .tt-week.unsorted{ font-style:italic; }
+  .tt-cell{ background:var(--surface); display:flex; flex-direction:column; gap:4px; min-height:54px; position:relative; }
+  .tt-cell.now{ background:color-mix(in srgb, var(--surface) 88%, var(--ink) 12%); }
+  .tt-cell.drop-ok{ outline:2px dashed var(--ink-soft); outline-offset:-3px; }
+  .tt-cell.drop-here{ outline:2px solid var(--ink); outline-offset:-3px; }
+  .tt-chip{ display:block; width:100%; border:none; border-radius:5px; padding:4px 7px; color:#fff; font-family:'Inter',sans-serif; font-size:12px; font-weight:600;
+    text-align:left; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,.15); line-height:1.25; word-break:break-word; }
+  .tt-chip:hover{ filter:brightness(1.1); }
+  .tt-chip.dragging{ opacity:.4; }
+  .tt-add{ align-self:flex-start; border:1px dashed var(--paper-edge); background:transparent; color:var(--ink-soft); border-radius:5px;
+    font-size:11.5px; padding:2px 7px; cursor:pointer; opacity:0; transition:opacity .12s ease; }
+  .tt-cell:hover .tt-add, .tt-add:focus{ opacity:1; }
+  @media (hover:none){ .tt-add{ opacity:.7; } }
+  .tt-add:hover{ color:var(--ink); border-color:var(--ink-soft); }
+  .tt-empty{ padding:30px; text-align:center; color:var(--ink-soft); background:var(--paper-card); }
+  .card .week-tag{ background:var(--paper); border:1px solid var(--paper-edge); border-radius:8px; padding:0 6px; }
+  .editor-title-row{ display:flex; gap:14px; align-items:flex-end; }
+  .editor-title-row input#editTitle{ flex:1; min-width:0; }
+  .editor-week{ flex-shrink:0; }
+  .editor-week label{ margin-bottom:4px; }
+  @media (max-width:640px){
+    .tt-inner{ padding:12px 10px 40px 10px; }
+    .editor-title-row{ flex-wrap:wrap; }
+  }
   .dl-edit-row{ display:flex; gap:6px; align-items:center; margin-bottom:6px; }
   .topic-edit-form .dl-edit-row input{ margin-bottom:0; }
   .topic-edit-form .dl-edit-row input[type=date]{ width:auto; flex:0 0 auto; }
@@ -615,6 +658,7 @@ try{ var th = appStore.getItem('binder-theme'); if(th) document.documentElement.
         <button id="apiKeyBtn">🔑 Google API key</button>
         <button id="autoBackupBtn">💾 Auto-backup: off</button>
         <button id="calendarBtn">🗓 Calendar</button>
+        <button id="timetableBtn">📚 Timetable</button>
         <button id="deadlinesBtn">📅 Deadlines</button>
         <button id="themeBtn">🌙 Dark mode</button>
         <input type="file" id="restoreInput" accept="application/json" style="display:none;">
@@ -700,8 +744,12 @@ try{ var th = appStore.getItem('binder-theme'); if(th) document.documentElement.
       </div>
     </div>
     <div class="editor-inner">
-      <div class="editor-row">
+      <div class="editor-row editor-title-row">
         <input type="text" id="editTitle" placeholder="Note title" lang="en-GB" spellcheck="true">
+        <div class="editor-week">
+          <label for="editWeek">Week</label>
+          <select id="editWeek" title="Which week of term this note is for (shows in the Timetable)"></select>
+        </div>
       </div>
       <div class="editor-row editor-write">
         <div class="md-toolbar" role="toolbar" aria-label="Formatting">
@@ -765,6 +813,25 @@ try{ var th = appStore.getItem('binder-theme'); if(th) document.documentElement.
       <div class="cal-grid" id="calGrid"></div>
       <div id="calDayPanel"></div>
       <div class="cal-legend" id="calLegend"></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="ttOverlay">
+  <div class="tt-page">
+    <div class="editor-bar">
+      <h2 class="tt-title">📚 Timetable</h2>
+      <span class="editor-bar-hint">Click a note to open it · drag a note to another week · Esc to close</span>
+      <button class="btn btn-primary" id="ttClose">Close</button>
+    </div>
+    <div class="tt-inner">
+      <div class="tt-controls">
+        <label>Week 1 starts on <input type="date" id="ttTermStart"></label>
+        <label>Show <select id="ttWeekFilter"></select></label>
+        <label>Topic <select id="ttTopicFilter"></select></label>
+      </div>
+      <p class="tt-help" id="ttHelp"></p>
+      <div class="tt-scroll"><div class="tt-grid" id="ttGrid"></div></div>
     </div>
   </div>
 </div>
@@ -920,6 +987,7 @@ function sanitizeBinder(obj){
       content: str(n.content),
       updatedAt: Number.isFinite(n.updatedAt) ? n.updatedAt : Date.now(),
       ...(Number.isFinite(n.createdAt) ? { createdAt: n.createdAt } : {}),
+      ...(isWeekNum(n.week) ? { week: n.week } : {}),
       attachments: (Array.isArray(n.attachments) ? n.attachments : [])
         .filter(a => a && typeof a === 'object' && (isSafeUrl(a.url) || isFileAttachment(a)))
         .map(a => isFileAttachment(a)
@@ -932,8 +1000,14 @@ function sanitizeBinder(obj){
         .map(r => ({ label: str(r.label, 200), query: str(r.query, 300), stance: str(r.stance, 20), note: str(r.note, 500) }))
     });
   });
-  return { topics, notes };
+  const out = { topics, notes };
+  if(typeof obj.termStart === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(obj.termStart)) out.termStart = obj.termStart;
+  return out;
 }
+
+// Week of term a note is for (1 to MAX_WEEK), shown in the Timetable. Notes without one have no "week" field.
+const MAX_WEEK = 52;
+function isWeekNum(w){ return Number.isInteger(w) && w >= 1 && w <= MAX_WEEK; }
 
 function isSafeUrl(u){ return typeof u === 'string' && /^https?:\/\//i.test(u.trim()); }
 // A file added to a note (slides, Word document...). The note keeps its name; the file itself is kept
@@ -1439,7 +1513,8 @@ function renderCards(){
   if(q){
     const pool = searchScope === 'all' ? data.notes : data.notes.filter(n => n.topicId === activeTopicId);
     const ql = q.toLowerCase();
-    notesToShow = pool.filter(n => n.title.toLowerCase().includes(ql) || n.content.toLowerCase().includes(ql));
+    const wq = ql.match(/^w(?:ee)?k\s*(\d{1,2})$/);   // "week 3" or "wk3" finds the notes filed under that week
+    notesToShow = pool.filter(n => n.title.toLowerCase().includes(ql) || n.content.toLowerCase().includes(ql) || (wq && n.week === Number(wq[1])));
   } else {
     notesToShow = data.notes.filter(n => n.topicId === activeTopicId);
   }
@@ -1475,6 +1550,7 @@ function renderCards(){
       <p>${bodyHtml}</p>
       <div class="meta">
         <span>${note.createdAt ? 'Added' : 'Updated'} ${dateStr}</span>
+        ${note.week ? `<span class="week-tag">Week ${note.week}</span>` : ''}
         ${note.attachments && note.attachments.length ? `<span class="clip">📎 ${note.attachments.length}</span>` : ''}
         ${note.relatedReading && note.relatedReading.length ? `<span class="clip">🔗 ${note.relatedReading.length}</span>` : ''}
       </div>
@@ -1603,6 +1679,7 @@ function openEditor(noteId){
   const note = data.notes.find(n => n.id === noteId);
   $('editTitle').value = note ? note.title : '';
   $('editContent').value = note ? note.content : '';
+  fillWeekSelect($('editWeek'), note && note.week, 'No week');
   pendingAttachments = note ? JSON.parse(JSON.stringify(note.attachments || [])) : [];
   editorSnapshot = editorState();
   setPreview(false);
@@ -1618,18 +1695,18 @@ function openEditor(noteId){
 
 let editorSnapshot = '';
 function editorState(){
-  return JSON.stringify([$('editTitle').value, $('editContent').value, pendingAttachments]);
+  return JSON.stringify([$('editTitle').value, $('editContent').value, $('editWeek').value, pendingAttachments]);
 }
 
 function closeEditor(){
   $('overlay').classList.remove('open');
-  document.body.classList.remove('editor-open');
+  if(!$('calOverlay').classList.contains('open') && !$('ttOverlay').classList.contains('open')) document.body.classList.remove('editor-open');
   editingNoteId = null;
   pendingAttachments = [];
   renderSidebar();
 }
 
-function render(){ if(typeof renderCalendar === 'function') renderCalendar(); renderSpine(); renderTabs(); renderHeader(); renderSearchScope(); renderCards(); renderRelatedHost(); renderDeadlines(); renderSafetyBanner(); }
+function render(){ if(typeof renderCalendar === 'function') renderCalendar(); if(typeof renderTimetable === 'function') renderTimetable(); renderSpine(); renderTabs(); renderHeader(); renderSearchScope(); renderCards(); renderRelatedHost(); renderDeadlines(); renderSafetyBanner(); }
 
 // ---- note editor: what you see is what you get, saved as Markdown ----
 // The note box shows real bold / underline / highlight. Notes are still stored as the same
@@ -1949,7 +2026,7 @@ function openCalendar(){
 }
 function closeCalendar(){
   $('calOverlay').classList.remove('open');
-  if(!$('overlay').classList.contains('open')) document.body.classList.remove('editor-open');
+  if(!$('overlay').classList.contains('open') && !$('ttOverlay').classList.contains('open')) document.body.classList.remove('editor-open');
 }
 
 function renderCalendar(){
@@ -2098,9 +2175,175 @@ document.addEventListener('keydown', (e) => {
   if(e.key === 'ArrowRight') $('calNext').click();
 });
 
+// ---- timetable: lecture notes filed by week (down the side) and topic (across the top) ----
+// A note's week is note.week (1-52, optional). data.termStart is the Monday (or any day) Week 1 starts,
+// used to show dates and to pick this week for new notes.
+let ttWeek = '';       // '' = all weeks, a number, or 'none'
+let ttTopic = '';      // '' = all topics, or a topic id
+let ttDragId = null;
+
+function setNoteWeek(note, value){
+  const w = parseInt(value, 10);
+  if(isWeekNum(w)) note.week = w; else delete note.week;
+}
+function termStartDate(){
+  if(!data.termStart) return null;
+  const [y, m, d] = data.termStart.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+function currentWeek(){
+  const start = termStartDate();
+  if(!start) return null;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const w = Math.floor(Math.round((today - start) / 86400000) / 7) + 1;
+  return isWeekNum(w) ? w : null;
+}
+function weekStartText(w){
+  const start = termStartDate();
+  if(!start) return '';
+  const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + (w - 1) * 7);
+  return d.toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+}
+function fillWeekSelect(sel, selected, noneLabel){
+  const now = currentWeek();
+  let html = `<option value="">${noneLabel}</option>`;
+  for(let w = 1; w <= MAX_WEEK; w++){
+    const when = weekStartText(w);
+    html += `<option value="${w}" ${w === selected ? 'selected' : ''}>Week ${w}${when ? ` (${when})` : ''}${w === now ? ' · this week' : ''}</option>`;
+  }
+  sel.innerHTML = html;
+}
+function ttWeekCount(){
+  let n = Math.max(12, currentWeek() || 0);
+  data.notes.forEach(note => { if(note.week > n) n = note.week; });
+  return Math.min(n, MAX_WEEK);
+}
+
+function openTimetable(){
+  $('ttOverlay').classList.add('open');
+  document.body.classList.add('editor-open');
+  renderTimetable();
+  const row = $('ttGrid').querySelector('.tt-week.now');
+  if(row) row.scrollIntoView({ block:'center' });
+}
+function closeTimetable(){
+  $('ttOverlay').classList.remove('open');
+  if(!$('overlay').classList.contains('open') && !$('calOverlay').classList.contains('open')) document.body.classList.remove('editor-open');
+}
+
+function renderTimetable(){
+  if(!$('ttOverlay').classList.contains('open')) return;
+  const weeks = ttWeekCount();
+  const now = currentWeek();
+  if(ttTopic && !data.topics.some(t => t.id === ttTopic)) ttTopic = '';
+  if(typeof ttWeek === 'number' && ttWeek > weeks) ttWeek = '';
+
+  $('ttTermStart').value = data.termStart || '';
+  let wOpts = `<option value="">All weeks</option>`;
+  if(now) wOpts += `<option value="${now}" ${ttWeek === now ? 'selected' : ''}>This week (Week ${now})</option>`;
+  for(let w = 1; w <= weeks; w++) wOpts += `<option value="${w}" ${ttWeek === w && w !== now ? 'selected' : ''}>Week ${w}</option>`;
+  wOpts += `<option value="none" ${ttWeek === 'none' ? 'selected' : ''}>Notes with no week yet</option>`;
+  $('ttWeekFilter').innerHTML = wOpts;
+  $('ttTopicFilter').innerHTML = `<option value="">All topics</option>` +
+    data.topics.map(t => `<option value="${t.id}" ${t.id === ttTopic ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('');
+
+  const unsorted = data.notes.filter(n => !n.week).length;
+  $('ttHelp').textContent = (data.termStart ? '' : 'Tip: set the date Week 1 starts and new notes will be put in the right week for you. ') +
+    (unsorted ? `${unsorted} note${unsorted === 1 ? ' has' : 's have'} no week yet: they're in the last row. Drag one into a week, or pick its week inside the note.` : '');
+
+  const topics = data.topics.map((t, i) => ({ t, colour: topicColor(t, i) })).filter(x => !ttTopic || x.t.id === ttTopic);
+  const grid = $('ttGrid');
+  if(!topics.length){ grid.style.gridTemplateColumns = '1fr'; grid.innerHTML = '<div class="tt-empty">Add a topic first.</div>'; return; }
+  let rows = [];
+  for(let w = 1; w <= weeks; w++) rows.push(w);
+  rows.push('none');
+  if(ttWeek !== '') rows = rows.filter(r => r === ttWeek);
+
+  grid.style.gridTemplateColumns = `minmax(92px, auto) repeat(${topics.length}, minmax(170px, 1fr))`;
+  let html = `<div class="tt-head corner">Week</div>` + topics.map(({ t, colour }) =>
+    `<div class="tt-head" style="--tt-colour:${colour}" data-topic="${t.id}" title="Show only ${escapeHtml(t.name)}">${escapeHtml(t.name)}</div>`).join('');
+  rows.forEach(r => {
+    const isNow = r === now;
+    const label = r === 'none' ? 'No week yet' : `Week ${r}`;
+    const when = r === 'none' ? '' : weekStartText(r);
+    html += `<div class="tt-week ${isNow ? 'now' : ''} ${r === 'none' ? 'unsorted' : ''}" data-week="${r}" title="Show only this week">${label}${when || isNow ? `<small>${isNow ? 'This week' : ''}${isNow && when ? ' · ' : ''}${when ? 'from ' + escapeHtml(when) : ''}</small>` : ''}</div>`;
+    topics.forEach(({ t, colour }) => {
+      const notes = data.notes.filter(n => n.topicId === t.id && (r === 'none' ? !n.week : n.week === r));
+      html += `<div class="tt-cell ${isNow ? 'now' : ''}" data-week="${r}" data-topic="${t.id}">` +
+        notes.map(n => `<button class="tt-chip" draggable="true" data-note="${n.id}" style="background:${colour}" title="Open this note">${escapeHtml(n.title || 'Untitled')}</button>`).join('') +
+        (r === 'none' ? '' : `<button class="tt-add" title="New ${escapeHtml(t.name)} note for ${label}">+ Note</button>`) + `</div>`;
+    });
+  });
+  grid.innerHTML = html;
+
+  grid.querySelectorAll('.tt-chip').forEach(chip => {
+    chip.addEventListener('click', () => openEditor(chip.dataset.note));
+    chip.addEventListener('dragstart', e => {
+      ttDragId = chip.dataset.note;
+      chip.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      try{ e.dataTransfer.setData('text/plain', chip.textContent); }catch(err){}
+      const topicId = chip.parentNode.dataset.topic;
+      grid.querySelectorAll(`.tt-cell[data-topic="${topicId}"]`).forEach(c => c.classList.add('drop-ok'));
+    });
+    chip.addEventListener('dragend', () => {
+      ttDragId = null;
+      grid.querySelectorAll('.drop-ok, .drop-here, .dragging').forEach(c => c.classList.remove('drop-ok', 'drop-here', 'dragging'));
+    });
+  });
+  grid.querySelectorAll('.tt-cell').forEach(cell => {
+    // a note can only move between weeks of its own topic
+    const canDrop = () => { const n = ttDragId && data.notes.find(x => x.id === ttDragId); return n && n.topicId === cell.dataset.topic; };
+    cell.addEventListener('dragover', e => { if(canDrop()){ e.preventDefault(); e.dataTransfer.dropEffect = 'move'; cell.classList.add('drop-here'); } });
+    cell.addEventListener('dragleave', () => cell.classList.remove('drop-here'));
+    cell.addEventListener('drop', e => {
+      e.preventDefault();
+      if(!canDrop()) return;
+      const note = data.notes.find(x => x.id === ttDragId);
+      const before = note.week;
+      setNoteWeek(note, cell.dataset.week);
+      ttDragId = null;
+      if(note.week !== before){
+        saveData(); render();
+        setStatus(note.week ? `Moved to Week ${note.week}` : 'Week removed from this note');
+      } else renderTimetable();
+    });
+    const add = cell.querySelector('.tt-add');
+    if(add) add.addEventListener('click', () => {
+      const note = { id: uid(), topicId: cell.dataset.topic, title: '', content: '', createdAt: Date.now(), updatedAt: Date.now(),
+        week: Number(cell.dataset.week), attachments: [], relatedReading: [] };
+      data.notes.push(note);
+      openEditor(note.id);
+    });
+  });
+  grid.querySelectorAll('.tt-head[data-topic]').forEach(h => h.addEventListener('click', () => { ttTopic = ttTopic === h.dataset.topic ? '' : h.dataset.topic; renderTimetable(); }));
+  grid.querySelectorAll('.tt-week').forEach(h => h.addEventListener('click', () => {
+    const r = h.dataset.week === 'none' ? 'none' : Number(h.dataset.week);
+    ttWeek = ttWeek === r ? '' : r;
+    renderTimetable();
+  }));
+}
+
+$('timetableBtn').addEventListener('click', openTimetable);
+$('ttClose').addEventListener('click', closeTimetable);
+$('ttWeekFilter').addEventListener('change', e => { const v = e.target.value; ttWeek = v === '' || v === 'none' ? v : Number(v); renderTimetable(); });
+$('ttTopicFilter').addEventListener('change', e => { ttTopic = e.target.value; renderTimetable(); });
+$('ttTermStart').addEventListener('change', e => {
+  const v = e.target.value;
+  if(/^\d{4}-\d{2}-\d{2}$/.test(v)) data.termStart = v; else delete data.termStart;
+  saveData(); renderTimetable();
+  const w = currentWeek();
+  setStatus(data.termStart ? (w ? `Saved: this is Week ${w}` : 'Saved term start date') : 'Term start date removed');
+});
+document.addEventListener('keydown', (e) => {
+  if(!$('ttOverlay').classList.contains('open') || $('overlay').classList.contains('open')) return;
+  if(e.key === 'Escape') closeTimetable();
+});
+
 // ---- always run the latest version of the site ----
 // Bump APP_VERSION here AND in version.json every time the site is published.
-const APP_VERSION = '2026-10-19.1';
+const APP_VERSION = '2026-10-19.2';
 function busyForUpdate(){
   return $('overlay').classList.contains('open') || isListening || isSummarizing || autoWriting;
 }
@@ -3388,6 +3631,8 @@ $('printBtn').addEventListener('click', () => {
 $('newNoteBtn').addEventListener('click', () => {
   if(!activeTopicId) return;
   const note = { id: uid(), topicId: activeTopicId, title: '', content: '', createdAt: Date.now(), updatedAt: Date.now(), attachments: [], relatedReading: [] };
+  const wk = currentWeek();
+  if(wk) note.week = wk;
   data.notes.push(note);
   openEditor(note.id);
 });
@@ -3401,7 +3646,7 @@ function mergeExternalChanges(){
     if(fresh){
       data = fresh;
       const existing = mine && data.notes.find(n => n.id === mine.id);
-      if(existing){ Object.assign(existing, { title: mine.title, content: mine.content, attachments: mine.attachments, updatedAt: mine.updatedAt }); }
+      if(existing){ Object.assign(existing, { title: mine.title, content: mine.content, attachments: mine.attachments, updatedAt: mine.updatedAt }); setNoteWeek(existing, mine.week); }
       else if(mine){
         if(!data.topics.find(t => t.id === mine.topicId) && data.topics.length) mine.topicId = data.topics[0].id;
         data.notes.push(mine);
@@ -3419,6 +3664,7 @@ function scheduleAutoSave(){
   if(!note) return;
   note.title = $('editTitle').value;
   note.content = $('editContent').value;
+  setNoteWeek(note, $('editWeek').value);
   note.attachments = pendingAttachments.slice();
   note.updatedAt = Date.now();
   clearTimeout(autoSaveTimer);
@@ -3433,6 +3679,7 @@ window.addEventListener('pagehide', () => {
 });
 $('editTitle').addEventListener('input', scheduleAutoSave);
 $('editContent').addEventListener('input', scheduleAutoSave);
+$('editWeek').addEventListener('change', scheduleAutoSave);
 
 $('saveNoteBtn').addEventListener('click', () => {
   clearTimeout(autoSaveTimer);
@@ -3441,6 +3688,7 @@ $('saveNoteBtn').addEventListener('click', () => {
   if(note){
     note.title = $('editTitle').value.trim();
     note.content = $('editContent').value.trim();
+    setNoteWeek(note, $('editWeek').value);
     note.attachments = pendingAttachments;
     note.updatedAt = Date.now();
     const isEmpty = !note.title && !note.content && note.attachments.length===0;
