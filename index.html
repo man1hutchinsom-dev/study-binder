@@ -233,6 +233,18 @@ try{ var th = appStore.getItem('binder-theme'); if(th) document.documentElement.
     margin-bottom:8px; color:#fff; display:inline-block; padding:2px 7px; border-radius:8px; width:fit-content;
   }
   .clip{ opacity:.8; }
+  /* moving notes into a different order: drag the ⠿ handle, or use the ◀ ▶ buttons */
+  .card{ position:relative; }
+  .card.can-move h3{ padding-right:74px; }
+  .card .move-bar{ position:absolute; top:8px; right:8px; display:flex; gap:2px; opacity:0; transition:opacity .12s ease; }
+  .card:hover .move-bar, .card:focus-within .move-bar{ opacity:1; }
+  @media (hover:none){ .card .move-bar{ opacity:1; } }
+  .move-bar button{ border:1px solid var(--paper-edge); background:var(--paper-card); color:var(--ink-soft);
+    border-radius:4px; width:22px; height:22px; padding:0; font-size:11px; line-height:1; cursor:pointer; }
+  .move-bar button:hover:not(:disabled){ color:var(--ink); border-color:var(--ink-soft); }
+  .move-bar button:disabled{ opacity:.35; cursor:default; }
+  .move-bar .drag-handle{ cursor:grab; font-size:13px; }
+  .card.dragging{ opacity:.45; transform:none; }
 
   .empty{ margin-top:60px; text-align:center; color:var(--ink-soft); }
   .empty h2{ font-family:'Spectral',serif; font-size:22px; color:var(--ink); margin-bottom:6px; }
@@ -1432,7 +1444,9 @@ function renderCards(){
     notesToShow = data.notes.filter(n => n.topicId === activeTopicId);
   }
 
-  // keep notes in the order they were added (oldest first); opening or editing one doesn't move it
+  // notes show in the order they are kept in data.notes (oldest first unless Mani has moved them);
+  // opening or editing one doesn't move it
+  const canMove = !q && notesToShow.length > 1;
 
   if(notesToShow.length === 0){
     emptyEl.style.display = 'block';
@@ -1466,8 +1480,84 @@ function renderCards(){
       </div>
     `;
     card.addEventListener('click', () => openEditor(note.id));
+    if(canMove) addMoveControls(card, note, notesToShow);
     cardsEl.appendChild(card);
   });
+}
+
+// ---- move notes into a different order (within a topic) ----
+// The order is simply the order of data.notes, so it is saved, backed up and restored with no new fields.
+function setTopicNoteOrder(topicId, orderedIds){
+  const slots = [];
+  data.notes.forEach((n, i) => { if(n.topicId === topicId) slots.push(i); });
+  const byId = new Map(data.notes.map(n => [n.id, n]));
+  const ordered = orderedIds.map(id => byId.get(id)).filter(n => n && n.topicId === topicId);
+  if(ordered.length !== slots.length) return false;   // something changed underneath; leave it alone
+  const changed = slots.some((slot, k) => data.notes[slot] !== ordered[k]);
+  if(!changed) return false;
+  slots.forEach((slot, k) => { data.notes[slot] = ordered[k]; });
+  return true;
+}
+
+function moveNoteBy(noteId, step){
+  const note = data.notes.find(n => n.id === noteId);
+  if(!note) return;
+  const ids = data.notes.filter(n => n.topicId === note.topicId).map(n => n.id);
+  const from = ids.indexOf(noteId), to = from + step;
+  if(to < 0 || to >= ids.length) return;
+  ids.splice(from, 1); ids.splice(to, 0, noteId);
+  if(setTopicNoteOrder(note.topicId, ids)){
+    saveData(); renderCards();
+    const btn = document.querySelector(`.card[data-note-id="${noteId}"] .move-${step < 0 ? 'back' : 'fwd'}`);
+    if(btn && !btn.disabled) btn.focus();
+  }
+}
+
+let draggingCard = null;
+function addMoveControls(card, note, list){
+  const pos = list.indexOf(note);
+  card.classList.add('can-move');
+  card.dataset.noteId = note.id;
+  const bar = document.createElement('div');
+  bar.className = 'move-bar';
+  bar.innerHTML = `
+    <button class="drag-handle" title="Drag to move this note" aria-label="Drag to move this note">⠿</button>
+    <button class="move-back" title="Move earlier" aria-label="Move this note earlier" ${pos === 0 ? 'disabled' : ''}>◀</button>
+    <button class="move-fwd" title="Move later" aria-label="Move this note later" ${pos === list.length - 1 ? 'disabled' : ''}>▶</button>`;
+  bar.addEventListener('click', e => e.stopPropagation());   // don't open the note
+  bar.querySelector('.move-back').addEventListener('click', () => moveNoteBy(note.id, -1));
+  bar.querySelector('.move-fwd').addEventListener('click', () => moveNoteBy(note.id, 1));
+  const handle = bar.querySelector('.drag-handle');
+  // only the handle starts a drag, so selecting text or clicking the card still works as before
+  handle.addEventListener('mousedown', () => { card.draggable = true; });
+  handle.addEventListener('mouseup', () => { card.draggable = false; });
+  card.addEventListener('dragstart', e => {
+    if(!card.draggable){ e.preventDefault(); return; }
+    draggingCard = card;
+    card.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    try{ e.dataTransfer.setData('text/plain', note.title || 'note'); }catch(err){}
+  });
+  card.addEventListener('dragover', e => {
+    if(!draggingCard || draggingCard === card) { if(draggingCard) e.preventDefault(); return; }
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const cards = [...card.parentNode.children];
+    // moving forwards drops after this card, backwards drops before it
+    if(cards.indexOf(draggingCard) < cards.indexOf(card)) card.after(draggingCard);
+    else card.before(draggingCard);
+  });
+  card.addEventListener('drop', e => e.preventDefault());
+  card.addEventListener('dragend', () => {
+    card.draggable = false;
+    card.classList.remove('dragging');
+    if(draggingCard !== card) return;
+    draggingCard = null;
+    const ids = [...$('cards').querySelectorAll('.card[data-note-id]')].map(c => c.dataset.noteId);
+    if(setTopicNoteOrder(note.topicId, ids)) saveData();
+    renderCards();
+  });
+  card.appendChild(bar);
 }
 
 function renderAttachList(){
@@ -2010,7 +2100,7 @@ document.addEventListener('keydown', (e) => {
 
 // ---- always run the latest version of the site ----
 // Bump APP_VERSION here AND in version.json every time the site is published.
-const APP_VERSION = '2026-10-13.2';
+const APP_VERSION = '2026-10-19.1';
 function busyForUpdate(){
   return $('overlay').classList.contains('open') || isListening || isSummarizing || autoWriting;
 }
