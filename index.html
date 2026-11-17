@@ -459,6 +459,13 @@ try{ var th = appStore.getItem('binder-theme'); if(th) document.documentElement.
     .editor-write .md-toolbar-title, .editor-write .md-sep{ display:none; }
     .editor-write .md-btn{ padding:6px 8px; }
   }
+  .md-wordcount{ font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--ink-soft); text-align:center; line-height:1.45; }
+  .md-wordcount strong{ color:var(--ink); font-weight:600; }
+  .md-wordcount .wc-sel{ display:block; color:var(--teal); }
+  .md-wordcount .wc-sel[hidden]{ display:none; }
+  @media (max-width:640px){
+    .editor-write .md-wordcount{ margin-left:auto; align-self:center; text-align:right; padding:0 4px; font-size:11px; }
+  }
   .md-spacer{ flex:1; }
   .md-preview{ min-height:200px; background:var(--surface); border:1px solid var(--paper-edge); border-radius:6px; padding:12px 14px; font-size:14px; line-height:1.6; overflow-wrap:anywhere; }
   .md h1,.md h2,.md h3{ font-family:'Spectral',serif; margin:.7em 0 .3em 0; line-height:1.25; }
@@ -762,6 +769,11 @@ try{ var th = appStore.getItem('binder-theme'); if(th) document.documentElement.
           <button class="md-btn" data-md="h2" title="Heading">H</button>
           <button class="md-btn" data-md="ul" title="Bullet list">• List</button>
           <button class="md-btn" data-md="ol" title="Numbered list">1. List</button>
+          <span class="md-sep"></span>
+          <div class="md-wordcount" id="wordCount" aria-live="polite" title="Words in this note. Select some words to count just those.">
+            <span class="wc-all"><strong id="wcAll">0</strong> words</span>
+            <span class="wc-sel" id="wcSelWrap" hidden><strong id="wcSel">0</strong> selected</span>
+          </div>
         </div>
         <div id="editContent" class="rich-editor" contenteditable="true" role="textbox" aria-multiline="true" lang="en-GB" spellcheck="true" data-placeholder="Write your notes… To make words bold, underlined or highlighted, select them and press a button on the left."></div>
       </div>
@@ -1832,7 +1844,7 @@ function editorToMarkdown(el){
 const richEditor = $('editContent');
 Object.defineProperty(richEditor, 'value', {
   get(){ return editorToMarkdown(richEditor); },
-  set(v){ richEditor.innerHTML = mdToEditorHtml(v); updateRichEmpty(); updateToolbarState(); }
+  set(v){ richEditor.innerHTML = mdToEditorHtml(v); updateRichEmpty(); updateToolbarState(); scheduleWordCount(); }
 });
 function updateRichEmpty(){
   richEditor.classList.toggle('is-empty', !richEditor.textContent.trim() && !richEditor.querySelector('li'));
@@ -1950,6 +1962,30 @@ function updateToolbarState(){
   document.querySelectorAll('.md-btn[data-md]').forEach(b => b.classList.toggle('active', !!state[b.getAttribute('data-md')]));
 }
 document.addEventListener('selectionchange', updateToolbarState);
+
+// word count in the Format bar: counts the words you can see (not hidden formatting marks)
+function countWords(text){
+  const m = String(text || '').match(/[\p{L}\p{N}]+(?:['\u2019\-][\p{L}\p{N}]+)*/gu);
+  return m ? m.length : 0;
+}
+let wordCountQueued = false;
+function updateWordCount(){
+  wordCountQueued = false;
+  const all = countWords(richEditor.innerText || richEditor.textContent);
+  $('wcAll').textContent = all.toLocaleString('en-GB');
+  $('wcAll').nextSibling.textContent = all === 1 ? ' word' : ' words';
+  const r = editorRange();
+  const picked = (r && !r.collapsed) ? countWords(window.getSelection().toString()) : 0;
+  $('wcSelWrap').hidden = !picked;
+  $('wcSel').textContent = picked.toLocaleString('en-GB');
+}
+function scheduleWordCount(){
+  if(wordCountQueued) return;
+  wordCountQueued = true;
+  requestAnimationFrame(updateWordCount);
+}
+richEditor.addEventListener('input', scheduleWordCount);
+document.addEventListener('selectionchange', scheduleWordCount);
 
 richEditor.addEventListener('input', updateRichEmpty);
 richEditor.addEventListener('keydown', e => {
@@ -2343,7 +2379,7 @@ document.addEventListener('keydown', (e) => {
 
 // ---- always run the latest version of the site ----
 // Bump APP_VERSION here AND in version.json every time the site is published.
-const APP_VERSION = '2026-10-19.2';
+const APP_VERSION = '2026-11-17.1';
 function busyForUpdate(){
   return $('overlay').classList.contains('open') || isListening || isSummarizing || autoWriting;
 }
