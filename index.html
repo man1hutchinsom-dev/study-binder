@@ -459,12 +459,13 @@ try{ var th = appStore.getItem('binder-theme'); if(th) document.documentElement.
     .editor-write .md-toolbar-title, .editor-write .md-sep{ display:none; }
     .editor-write .md-btn{ padding:6px 8px; }
   }
-  .md-wordcount{ font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--ink-soft); text-align:center; line-height:1.45; }
-  .md-wordcount strong{ color:var(--ink); font-weight:600; }
+  .md-wordcount{ font-family:'IBM Plex Mono',monospace; font-size:12.5px; color:var(--ink); text-align:center; line-height:1.5;
+    padding:7px 6px; border:1px solid var(--paper-edge); border-radius:5px; background:var(--surface); }
+  .md-wordcount strong{ color:var(--ink); font-weight:700; font-size:14px; }
   .md-wordcount .wc-sel{ display:block; color:var(--teal); }
   .md-wordcount .wc-sel[hidden]{ display:none; }
   @media (max-width:640px){
-    .editor-write .md-wordcount{ margin-left:auto; align-self:center; text-align:right; padding:0 4px; font-size:11px; }
+    .editor-write .md-wordcount{ padding:5px 8px; font-size:11.5px; }
   }
   .md-spacer{ flex:1; }
   .md-preview{ min-height:200px; background:var(--surface); border:1px solid var(--paper-edge); border-radius:6px; padding:12px 14px; font-size:14px; line-height:1.6; overflow-wrap:anywhere; }
@@ -769,7 +770,6 @@ try{ var th = appStore.getItem('binder-theme'); if(th) document.documentElement.
           <button class="md-btn" data-md="h2" title="Heading">H</button>
           <button class="md-btn" data-md="ul" title="Bullet list">• List</button>
           <button class="md-btn" data-md="ol" title="Numbered list">1. List</button>
-          <span class="md-sep"></span>
           <div class="md-wordcount" id="wordCount" aria-live="polite" title="Words in this note. Select some words to count just those.">
             <span class="wc-all"><strong id="wcAll">0</strong> words</span>
             <span class="wc-sel" id="wcSelWrap" hidden><strong id="wcSel">0</strong> selected</span>
@@ -2379,7 +2379,7 @@ document.addEventListener('keydown', (e) => {
 
 // ---- always run the latest version of the site ----
 // Bump APP_VERSION here AND in version.json every time the site is published.
-const APP_VERSION = '2026-11-17.1';
+const APP_VERSION = '2026-11-17.2';
 function busyForUpdate(){
   return $('overlay').classList.contains('open') || isListening || isSummarizing || autoWriting;
 }
