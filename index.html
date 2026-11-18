@@ -267,9 +267,6 @@ try{ var th = appStore.getItem('binder-theme'); if(th) document.documentElement.
   #overlay .md-preview{ min-height:calc(100vh - 210px); font-size:16px; line-height:1.7; padding:16px 18px; }
   .editor-extras{ margin-top:28px; padding-top:18px; border-top:2px solid var(--paper-edge); }
   .extras-title{ font-family:'Spectral',serif; font-size:18px; margin:0 0 14px 0; font-weight:600; }
-  .editor-voice-controls{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-  .editor-voice-controls .voice-status{ margin-top:0; }
-  .editor-voice-live{ font-size:12.5px; color:var(--ink-soft); margin-top:6px; white-space:pre-wrap; max-height:90px; overflow-y:auto; }
   body.editor-open{ overflow:hidden; }
   @media (max-width:640px){
     .editor-bar{ padding:8px 12px; flex-wrap:wrap; }
@@ -342,7 +339,6 @@ try{ var th = appStore.getItem('binder-theme'); if(th) document.documentElement.
   .mic-btn:hover{ filter:brightness(1.15); }
   .mic-btn.listening{ background:var(--danger); }
   .mic-btn.listening .dot{ animation:pulse 1s infinite; }
-  #editorMicBtn.mic-on{ background:var(--danger); color:#fff; }
   .dot{ width:8px;height:8px;border-radius:50%; background:#fff; display:inline-block; }
   @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:.25;} }
   .voice-status{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft); margin-top:8px; min-height:14px; }
@@ -468,6 +464,32 @@ try{ var th = appStore.getItem('binder-theme'); if(th) document.documentElement.
     .editor-write .md-wordcount{ padding:5px 8px; font-size:11.5px; }
   }
   .md-spacer{ flex:1; }
+  /* voice panel on the right of the open note */
+  .note-voice{ position:sticky; top:66px; z-index:1; width:210px; flex-shrink:0; display:flex; flex-direction:column; gap:8px;
+    padding:10px; background:var(--paper-card); border:1px solid var(--paper-edge); border-radius:8px; }
+  .note-voice-title, .note-voice-label{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-soft); text-align:center; }
+  .note-voice-label{ display:block; text-align:left; margin-bottom:4px; }
+  .note-voice-mic{ width:100%; padding:10px 8px; font-weight:600; border:1px solid var(--paper-edge); background:var(--surface); color:var(--ink); }
+  .note-voice-mic.mic-on{ background:var(--danger); color:#fff; border-color:var(--danger); }
+  .note-voice-help{ font-size:12px; color:var(--ink-soft); line-height:1.45; margin:0; }
+  .note-voice .voice-status{ margin-top:0; }
+  .note-voice-hearing{ font-size:12.5px; color:var(--ink-soft); font-style:italic; max-height:90px; overflow-y:auto; }
+  .note-voice-hearing:empty{ display:none; }
+  .note-voice-sum{ border-top:1px solid var(--paper-edge); padding-top:8px; display:flex; flex-direction:column; gap:6px; }
+  .note-voice-sum-btns{ display:flex; gap:4px; }
+  .note-voice-sum-btns .md-btn{ flex:1; min-width:0; padding:6px 2px; font-size:11.5px; }
+  .note-voice-sum-text{ font-size:12.5px; line-height:1.5; white-space:pre-wrap; max-height:220px; overflow-y:auto; background:var(--paper); border-radius:6px; padding:8px; }
+  .note-voice-clear{ font-size:11.5px; padding:4px 6px; }
+  /* where spoken words are typed: a red dot, then the words still being heard */
+  .voice-anchor::before{ content:'●'; color:var(--danger); font-size:.75em; margin:0 2px; animation:pulse 1s infinite; }
+  .voice-anchor::after{ content:attr(data-hearing); color:var(--ink-soft); font-style:italic; }
+  @media (max-width:900px){ .note-voice{ width:170px; } }
+  @media (max-width:640px){
+    /* phones: the voice controls sit above the note instead */
+    .note-voice{ order:-1; position:static; width:auto; flex-direction:row; flex-wrap:wrap; align-items:center; padding:6px; gap:6px; }
+    .note-voice-title, .note-voice-help, .note-voice-sum{ display:none; }
+    .note-voice-mic{ width:auto; flex:1; padding:7px 8px; }
+  }
   .md-preview{ min-height:200px; background:var(--surface); border:1px solid var(--paper-edge); border-radius:6px; padding:12px 14px; font-size:14px; line-height:1.6; overflow-wrap:anywhere; }
   .md h1,.md h2,.md h3{ font-family:'Spectral',serif; margin:.7em 0 .3em 0; line-height:1.25; }
   .md h1{ font-size:21px; } .md h2{ font-size:18px; } .md h3{ font-size:16px; }
@@ -776,6 +798,24 @@ try{ var th = appStore.getItem('binder-theme'); if(th) document.documentElement.
           </div>
         </div>
         <div id="editContent" class="rich-editor" contenteditable="true" role="textbox" aria-multiline="true" lang="en-GB" spellcheck="true" data-placeholder="Write your notes… To make words bold, underlined or highlighted, select them and press a button on the left."></div>
+        <aside class="note-voice" id="noteVoice" aria-label="Voice notes">
+          <span class="note-voice-title">🎙 Voice</span>
+          <button class="btn note-voice-mic" id="editorMicBtn">🎙 Start listening</button>
+          <p class="note-voice-help">What you say is typed into the note where the red dot is. Click anywhere in the note to fix a word, even while it's listening.</p>
+          <div class="voice-status" id="editorVoiceStatus"></div>
+          <div class="note-voice-hearing" id="editorVoiceLive"></div>
+          <div class="note-voice-sum">
+            <span class="note-voice-label">Summary of what you recorded</span>
+            <div class="note-voice-sum-btns">
+              <button class="md-btn" data-voice-sum="quick">Quick</button>
+              <button class="md-btn" data-voice-sum="normal">Normal</button>
+              <button class="md-btn" data-voice-sum="detailed">Detailed</button>
+            </div>
+            <div class="note-voice-sum-text" id="editorSummary" hidden></div>
+            <button class="btn btn-primary" id="editorInsertVoiceBtn" hidden>Add summary to note</button>
+            <button class="btn btn-ghost note-voice-clear" id="editorClearVoiceBtn" title="Forget the recording so the next summary only covers what you say next. Your note is not changed.">Start a fresh recording</button>
+          </div>
+        </aside>
       </div>
 
       <div class="editor-extras">
@@ -793,15 +833,6 @@ try{ var th = appStore.getItem('binder-theme'); if(th) document.documentElement.
             <input type="text" name="label" id="attachLabel" placeholder="Label (optional)">
             <button id="attachAddBtn">Add link</button>
           </div>
-        </div>
-        <div class="editor-row editor-voice-row" id="editorVoiceRow">
-          <label>Voice notes</label>
-          <div class="editor-voice-controls">
-            <button class="btn btn-ghost" id="editorMicBtn">🎙 Start listening</button>
-            <button class="btn btn-ghost" id="editorInsertVoiceBtn" disabled>Insert voice notes</button>
-            <span class="voice-status" id="editorVoiceStatus"></span>
-          </div>
-          <div class="editor-voice-live" id="editorVoiceLive"></div>
         </div>
         <div id="relatedInline"></div>
       </div>
@@ -1699,8 +1730,10 @@ function openEditor(noteId){
   $('attachUrl').value = ''; $('attachLabel').value = '';
   $('deleteNoteBtn').style.display = note ? 'inline-block' : 'none';
   renderRelatedInline(note);
-  renderSidebar();
   $('overlay').classList.add('open');
+  voiceAnchor = null;
+  if(isListening) placeVoiceAnchor(false);   // already listening: carry on at the end of this note
+  renderSidebar();
   document.body.classList.add('editor-open');
   $('editTitle').focus();
 }
@@ -1713,6 +1746,7 @@ function editorState(){
 function closeEditor(){
   $('overlay').classList.remove('open');
   if(!$('calOverlay').classList.contains('open') && !$('ttOverlay').classList.contains('open')) document.body.classList.remove('editor-open');
+  removeVoiceAnchor();
   editingNoteId = null;
   pendingAttachments = [];
   renderSidebar();
@@ -2379,7 +2413,7 @@ document.addEventListener('keydown', (e) => {
 
 // ---- always run the latest version of the site ----
 // Bump APP_VERSION here AND in version.json every time the site is published.
-const APP_VERSION = '2026-11-17.2';
+const APP_VERSION = '2026-11-18.1';
 function busyForUpdate(){
   return $('overlay').classList.contains('open') || isListening || isSummarizing || autoWriting;
 }
@@ -2687,6 +2721,64 @@ function appendTranscript(text){
   if(liveTranscript && !/\s$/.test(liveTranscript)) liveTranscript += ' ';
   liveTranscript += text + ' ';
   saveVoice();
+  typeIntoNote(text);
+}
+
+// ---- voice typing into the open note ----
+// While listening with a note open, what you say is typed into the note at a
+// fixed spot (a red dot). Clicking elsewhere to fix a word never moves that
+// spot, and new words only ever go in at the dot, so fixes are never
+// overwritten. The dot is not part of the note and is never saved.
+let voiceAnchor = null;
+function noteIsOpen(){ return !!editingNoteId && $('overlay').classList.contains('open'); }
+function removeVoiceAnchor(){
+  if(voiceAnchor && voiceAnchor.parentNode) voiceAnchor.parentNode.removeChild(voiceAnchor);
+  voiceAnchor = null;
+}
+function placeVoiceAnchor(atCursor){
+  removeVoiceAnchor();
+  if(!noteIsOpen()) return null;
+  const a = document.createElement('span');
+  a.className = 'voice-anchor';
+  a.contentEditable = 'false';
+  const r = atCursor ? editorRange() : null;
+  if(r){
+    r.collapse(false);
+    r.insertNode(a);
+  } else {
+    // start on a fresh line at the end of the note (or reuse an empty last line)
+    if(!richEditor.textContent.trim() && !richEditor.querySelector('li')) richEditor.innerHTML = '';
+    let line = richEditor.lastElementChild;
+    if(!(line && line.tagName === 'DIV' && !line.textContent.trim() && !line.querySelector('*:not(br)'))){
+      line = document.createElement('div');
+      richEditor.appendChild(line);
+    }
+    line.innerHTML = '';
+    line.appendChild(a);
+  }
+  voiceAnchor = a;
+  updateRichEmpty();
+  return a;
+}
+function typeIntoNote(text){
+  text = text.trim();
+  if(!text || !noteIsOpen()) return;
+  if(!voiceAnchor || !richEditor.contains(voiceAnchor)) placeVoiceAnchor(false);
+  const a = voiceAnchor;
+  // look only at the words on the dot's own line
+  let line = a.parentNode;
+  while(line !== richEditor && !RICH_BLOCKS.test(line.tagName)) line = line.parentNode;
+  // start after the last line break before the dot, if there is one
+  const before = document.createRange();
+  before.setStart(line, 0);
+  line.querySelectorAll('br').forEach(br => { if(br.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING) before.setStartAfter(br); });
+  before.setEndBefore(a);
+  const lineText = before.toString();
+  const prev = lineText.slice(-1);
+  if(!prev || /[.!?]\s*$/.test(lineText.slice(-3))) text = text.charAt(0).toUpperCase() + text.slice(1);
+  a.parentNode.insertBefore(document.createTextNode((prev && !/\s/.test(prev) ? ' ' : '') + text), a);
+  updateRichEmpty();
+  richEditor.dispatchEvent(new Event('input', { bubbles: true }));
 }
 $('voiceLive').addEventListener('input', () => {
   liveTranscript = $('voiceLive').value;
@@ -2739,11 +2831,21 @@ function renderSidebar(){
   }
 
   $('insertVoiceBtn').disabled = !editingNoteId || (!hasTranscript && !currentSummary);
-  $('editorInsertVoiceBtn').disabled = !(hasTranscript || currentSummary);
-  $('editorMicBtn').textContent = isListening ? '🔴 Listening · press to stop' : '🎙 Start listening';
+  $('editorMicBtn').textContent = isListening ? '⏹ Stop listening' : '🎙 Start listening';
   $('editorMicBtn').classList.toggle('mic-on', isListening);
-  const liveText = (liveTranscript + interimText).trim();
-  $('editorVoiceLive').textContent = liveText ? '…' + liveText.slice(-300) : '';
+  $('editorVoiceLive').textContent = interimText.trim() ? 'Hearing: ' + interimText.trim() + '…' : '';
+  if(voiceAnchor) voiceAnchor.setAttribute('data-hearing', interimText.trim() ? ' ' + interimText.trim() + '…' : '');
+  document.querySelectorAll('[data-voice-sum]').forEach(btn => {
+    const level = btn.getAttribute('data-voice-sum');
+    btn.disabled = !hasTranscript || isSummarizing;
+    btn.classList.toggle('active', currentSummaryLevel === level && !!currentSummary);
+    btn.textContent = (isSummarizing && currentSummaryLevel === level) ? '…' : labels[level].replace(' brief', '');
+  });
+  const sumEl = $('editorSummary');
+  sumEl.hidden = !currentSummary && !isSummarizing;
+  sumEl.textContent = currentSummary || (isSummarizing ? 'Summarising…' : '');
+  $('editorInsertVoiceBtn').hidden = !currentSummary;
+  $('editorClearVoiceBtn').disabled = !hasTranscript && !currentSummary;
 
   const hint = $('insertHint');
   if(!editingNoteId && (hasTranscript || currentSummary)){
@@ -2776,6 +2878,7 @@ function stopListening(){
       recActive = false; recognition = null;
       if(interimText.trim()) appendTranscript(interimText);
       interimText = '';
+      removeVoiceAnchor();
       renderSidebar();
     }
   }, 2000);
@@ -2830,7 +2933,7 @@ function startRecognitionSession(){
     // words that were still being worked out when the session ended
     if(interimText.trim()) appendTranscript(interimText);
     interimText = '';
-    if(!isListening){ renderSidebar(); return; }
+    if(!isListening){ removeVoiceAnchor(); renderSidebar(); return; }
     if(Date.now() - lastStartAt < 1500) restartFails++; else restartFails = 0;
     if(restartFails > 2) setVoiceStatus('Reconnecting the microphone…');
     renderSidebar();
@@ -2857,7 +2960,7 @@ setInterval(() => {
 $('micBtn').addEventListener('click', () => {
   if(isListening){
     stopListening();
-    setVoiceStatus('Stopped. Choose a summary length below, or insert the raw transcript.');
+    setVoiceStatus(noteIsOpen() ? 'Stopped. What you said is in the note.' : 'Stopped. Choose a summary length below, or insert the raw transcript.');
     return;
   }
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -2867,10 +2970,16 @@ $('micBtn').addEventListener('click', () => {
   }
   isListening = true;
   restartFails = 0;
+  placeVoiceAnchor(true);   // words go where the cursor was in the note (or at the end)
   setVoiceStatus(LISTEN_ON_STATUS);
   renderSidebar();
   startRecognitionSession();
 });
+$('editorMicBtn').addEventListener('mousedown', e => e.preventDefault());   // keep the cursor where it is in the note
+document.querySelectorAll('[data-voice-sum]').forEach(btn => {
+  btn.addEventListener('click', () => summarizeAtLevel(btn.getAttribute('data-voice-sum')));
+});
+$('editorClearVoiceBtn').addEventListener('click', () => $('clearVoiceBtn').click());
 
 async function summarizeAtLevel(level){
   const text = liveTranscript.trim();
@@ -2919,7 +3028,17 @@ function insertVoiceIntoNote(){
   setVoiceStatus('Inserted into the open note and saved — you can keep writing.');
 }
 $('insertVoiceBtn').addEventListener('click', insertVoiceIntoNote);
-$('editorInsertVoiceBtn').addEventListener('click', insertVoiceIntoNote);
+$('editorInsertVoiceBtn').addEventListener('click', () => {
+  if(!noteIsOpen() || !currentSummary) return;
+  const contentEl = $('editContent');
+  const block = `--- Summary (${currentSummaryLevel}) ---\n${currentSummary}`;
+  const had = !!voiceAnchor;
+  removeVoiceAnchor();
+  contentEl.value = contentEl.value ? contentEl.value + '\n\n' + block : block;
+  if(had && isListening) placeVoiceAnchor(false);
+  contentEl.dispatchEvent(new Event('input', { bubbles: true }));
+  setVoiceStatus('Summary added to the end of the note.');
+});
 
 $('clearVoiceBtn').addEventListener('click', () => {
   liveTranscript = ''; interimText = ''; currentSummary = ''; currentSummaryLevel = null;
