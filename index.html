@@ -2413,7 +2413,7 @@ document.addEventListener('keydown', (e) => {
 
 // ---- always run the latest version of the site ----
 // Bump APP_VERSION here AND in version.json every time the site is published.
-const APP_VERSION = '2026-11-18.1';
+const APP_VERSION = '2026-11-24.1';
 function busyForUpdate(){
   return $('overlay').classList.contains('open') || isListening || isSummarizing || autoWriting;
 }
@@ -2593,10 +2593,34 @@ const fileDB = {
   put(rec){ return this.run('readwrite', s => s.put(rec)); },
   get(id){ return this.run('readonly', s => s.get(id)); }
 };
+// Read the whole file first. On Windows a file that is open in Word/PowerPoint, or kept only online
+// in OneDrive, can't be read, and the browser then just says "Failed to fetch".
+async function readWholeFile(file){
+  try{ return new Blob([await file.arrayBuffer()], { type: 'application/octet-stream' }); }
+  catch(e){
+    throw new Error('Study Binder couldn\'t open this file on your computer.\n\n' +
+      '• If it\'s open in Word, PowerPoint or another program, close it there and try again.\n' +
+      '• If it\'s in OneDrive, right-click the file in File Explorer and choose "Always keep on this device", then try again.');
+  }
+}
+async function appIsRunning(){
+  try{ const r = await fetch('/api/hello', { cache: 'no-store' }); return r.ok; }catch(e){ return false; }
+}
 async function saveFileToApp(id, file){
-  const res = await fetch('/api/file-save?id=' + encodeURIComponent(id) + '&name=' + encodeURIComponent(file.name), {
-    method: 'POST', headers: { 'X-SB-Token': SB_DESKTOP.token, 'Content-Type': 'application/octet-stream' }, body: file
+  const body = await readWholeFile(file);
+  const send = () => fetch('/api/file-save?id=' + encodeURIComponent(id) + '&name=' + encodeURIComponent(file.name), {
+    method: 'POST', headers: { 'X-SB-Token': SB_DESKTOP.token, 'Content-Type': 'application/octet-stream' }, body
   });
+  let res;
+  try{ res = await send(); }
+  catch(e){
+    if(!(await appIsRunning())){
+      throw new Error('The Study Binder app has stopped running in the background.\n\n' +
+        'Close this Study Binder window, then open Study Binder again from the icon on your desktop, and add the file again.');
+    }
+    try{ res = await send(); }   // a hiccup: try once more
+    catch(e2){ throw new Error('Study Binder couldn\'t copy this file into its folder. Please try again.'); }
+  }
   let r = null; try{ r = await res.json(); }catch(e){}
   if(!res.ok || !r || !r.ok) throw new Error((r && r.error) || 'Study Binder app not responding');
 }
@@ -2604,7 +2628,8 @@ async function addFilesToNote(files){
   if(!editingNoteId || !files || !files.length) return;
   const noteId = editingNoteId;
   for(const file of Array.from(files)){
-    const id = uid() + uid();
+    let id = uid() + uid();
+    while(id.length < 8) id += uid();   // the app only accepts ids of 6+ letters/numbers
     setStatus('Adding ' + file.name + '…');
     let where = 'browser';
     try{
